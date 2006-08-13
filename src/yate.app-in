@@ -1,0 +1,23 @@
+{application, yate,
+ [{description, "Yate module"},
+  {vsn,"0.0"},
+  {modules, [
+	     yate,
+	     yate_app,
+	     yate_sup,
+	     yate_srv,
+	     yate_conn,
+	     yate_conn_srv,
+	     yate_decode,
+	     yate_encode,
+	     yate_reg_srv,
+	     yate_util
+	    ]},
+  {registered, [
+		yate_sup,
+		yate_reg_srv
+	       ]},
+  {mod, {yate_app, []}},
+  {env, []},
+  {applications,
+        [kernel, stdlib]}]}.
