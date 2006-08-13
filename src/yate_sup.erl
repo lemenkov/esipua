@@ -34,6 +34,7 @@ start_client(Host, Port) ->
     {ok, Pid}.
 
 init(_Args) ->
+    ok = error_logger:logfile({open, "yate.log"}),
     RegSrvSpec = {yate_reg_srv, {yate_reg_srv, start_link, []},
 		 permanent, 10, worker, [yate_reg_srv]},
     {ok, {{one_for_one, 10, 60}, [RegSrvSpec]}}.
