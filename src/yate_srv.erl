@@ -56,27 +56,27 @@ code_change(_OldVsn, State, _Extra) ->
 handle_call({connect, Host, Port}, _From, State) ->
     {ok, Conn} = yate_sup:start_conn(Host, Port, self()),
     {reply, ok, State#sstate{conn=Conn}};
-handle_call({call, {install, Name, Fun}, Pid}, _From, State) ->
+handle_call({client, {install, Name, Fun}, Pid}, _From, State) ->
     Installed = State#sstate.installed,
     {ok, NewInstalled, NewPids} = install(install, Name, Pid, Fun, State, Installed),
     {reply, ok, State#sstate{installed=NewInstalled, pids=NewPids}};
 
-handle_call({call, {uninstall, Name}, Pid}, _From, State) ->
+handle_call({client, {uninstall, Name}, Pid}, _From, State) ->
     Installed = State#sstate.installed,
     {ok, NewInstalled, NewPids} = uninstall(install, Name, Pid, State, Installed),
     {reply, ok, State#sstate{installed=NewInstalled, pids=NewPids}};
 
-handle_call({call, {watch, Name, Fun}, Pid}, _From, State) ->
+handle_call({client, {watch, Name, Fun}, Pid}, _From, State) ->
     Installed = State#sstate.watched,
     {ok, NewInstalled, NewPids} = install(watch, Name, Pid, Fun, State, Installed),
     {reply, ok, State#sstate{watched=NewInstalled, pids=NewPids}};
 
-handle_call({call, {unwatch, Name}, Pid}, _From, State) ->
+handle_call({client, {unwatch, Name}, Pid}, _From, State) ->
     Installed = State#sstate.watched,
     {ok, NewInstalled, NewPids} = uninstall(watch, Name, Pid, State, Installed),
     {reply, ok, State#sstate{watched=NewInstalled, pids=NewPids}};
 
-handle_call({call, {msg, Name, Keys}, _Pid}, From, State) ->
+handle_call({client, {msg, Name, Keys}, _Pid}, From, State) ->
     ok = yate_conn:queue_msg(State#sstate.conn, Name, Keys, From),
     {noreply, State};
 
@@ -87,9 +87,9 @@ handle_call(Request, _From, State) ->
 
 handle_cast(stop, State) ->
     {stop, normal, State};
-handle_cast({ret, Cmd}, State) ->
+handle_cast({client, {ret, Cmd}, _Pid}, State) ->
     Processed = (Cmd#command.header)#message.processed,
-    yate:ret(State#sstate.conn, Cmd, Processed),
+    yate_conn:ret(State#sstate.conn, Cmd, Processed),
     {noreply, State};
 %% handle_cast({cast, {ans, RetValue, RetCmd}, From}, State) ->
 %%     error_logger:info_msg("Ans in ~p: ~p~n", [?MODULE, RetValue]),

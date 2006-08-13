@@ -103,13 +103,15 @@ handle_message(chan.hangup, Id, _Cmd, _From, _State, StateData) when Id == State
     error_logger:info_msg("Call hangup ~p~n", [StateData#sstate.id]),
     {stop, normal, StateData};
 handle_message(Type, _Id, Cmd, _From, StateName, StateData) ->
+    Handle = StateData#sstate.handle,
     error_logger:error_msg("Unsupported message in ~p: ~p~n", [?MODULE, Type]),
-    yate:ret(StateData#sstate.handle, Cmd, false),
+    yate:ret(Handle, Cmd, false),
     {next_state, StateName, StateData}.
 
 handle_dtmf(Text, Cmd, execute, StateData) ->
+    Handle = StateData#sstate.handle,
     error_logger:info_msg("Call dtmf ~p~n", [Text]),
-    yate:ret(StateData#sstate.handle, Cmd, true),
+    yate:ret(Handle, Cmd, true),
     {next_state, execute, StateData}.
 
 answer(Id, Cmd, StateData) ->

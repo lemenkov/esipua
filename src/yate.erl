@@ -30,7 +30,7 @@ connect(Host, Port) ->
 %%--------------------------------------------------------------------
 open(Client) ->
     UserPid = self(),
-    {ok, {client, Client, UserPid}}.
+    {ok, {yate_client, Client, UserPid}}.
 
 %%--------------------------------------------------------------------
 %% @spec watch(Handle, Name, Fun) -> true
@@ -86,7 +86,7 @@ uninstall(Handle, Name) ->
 %%--------------------------------------------------------------------
 ret(Handle, Cmd, Processed) ->
     Header = (Cmd#command.header)#message{processed=Processed},
-    gen_server:cast(Handle, {ret, Cmd#command{header=Header}}).
+    cast(Handle, {ret, Cmd#command{header=Header}}).
 
 %%--------------------------------------------------------------------
 %% @spec ret(Handle, Cmd, Processed, Retval) -> ok
@@ -98,7 +98,7 @@ ret(Handle, Cmd, Processed) ->
 %%--------------------------------------------------------------------
 ret(Handle, Cmd, Processed, Retval) ->
     Header = (Cmd#command.header)#message{processed=Processed},
-    gen_server:cast(Handle, {ret, Cmd#command{retvalue=Retval,header=Header}}).
+    cast(Handle, {ret, Cmd#command{retvalue=Retval,header=Header}}).
 
 %%--------------------------------------------------------------------
 %% @spec queue_msg(Handle, Name, Keys) -> ok
@@ -137,5 +137,8 @@ send_msg(Handle, Name, Keys) ->
 %%
 %% private functions
 %%
-call({client, Handle, UserPid}, Request) ->
-    gen_server:call(Handle, {call, Request, UserPid}).
+call({yate_client, Handle, UserPid}, Request) ->
+    gen_server:call(Handle, {client, Request, UserPid}).
+
+cast({yate_client, Handle, UserPid}, Request) ->
+    gen_server:cast(Handle, {client, Request, UserPid}).
