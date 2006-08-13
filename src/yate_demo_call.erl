@@ -40,11 +40,7 @@ init([Handle, Id]) ->
 			    CmdId = dict:fetch(id, Cmd#command.keys),
 			    Id == CmdId
 		    end),
-%%     ok = yate:watch(Handle, chan.hangup),
-%%     ok = yate:watch(Handle, call.drop),
-%%    ok = yate:watch(Handle, chan.notify),
 %%     ok = yate:install(Handle, chan.notify),
-%%    ok = yate:install(Handle, chan.notify),
     {ok, route, #sstate{handle=Handle, id=Id}}.
 
 %% Async
@@ -77,7 +73,11 @@ handle_info(Info, StateName, StateData) ->
     {next_state, StateName, StateData}.
 
 
-terminate(_Reason, _StateName, _StateData) ->
+terminate(_Reason, _StateName, StateData) ->
+    Handle = StateData#sstate.handle,
+    yate:unwatch(Handle, call.execute), 
+    yate:unwatch(Handle, chan.hangup),
+    yate:uninstall(Handle, chan.dtmf),
     terminate.
 
 code_change(_OldVsn, StateName, StateData, _Extra)  ->
@@ -93,9 +93,33 @@ handle_command(Type, _Id, _Cmd, _From, StateName, StateData) ->
 
 handle_message(call.execute, Id, Cmd, _From, route, StateData) when Id == StateData#sstate.id ->
     error_logger:info_msg("Call execute ~p. answer~n", [Id]),
+    ok = answer(Id, Cmd, StateData),
+    ok = record_wave(Cmd, StateData),
+    {next_state, execute, StateData};
+handle_message(chan.dtmf, Id, Cmd, _From, execute, StateData) when Id == StateData#sstate.id ->
+    Text = dict:fetch(text, Cmd#command.keys),
+    handle_dtmf(Text, Cmd, execute, StateData);
+handle_message(chan.hangup, Id, _Cmd, _From, _State, StateData) when Id == StateData#sstate.id ->
+    error_logger:info_msg("Call hangup ~p~n", [StateData#sstate.id]),
+    {stop, normal, StateData};
+handle_message(Type, _Id, Cmd, _From, StateName, StateData) ->
+    error_logger:error_msg("Unsupported message in ~p: ~p~n", [?MODULE, Type]),
+    yate:ret(StateData#sstate.handle, Cmd, false),
+    {next_state, StateName, StateData}.
+
+handle_dtmf(Text, Cmd, execute, StateData) ->
+    error_logger:info_msg("Call dtmf ~p~n", [Text]),
+    yate:ret(StateData#sstate.handle, Cmd, true),
+    {next_state, execute, StateData}.
+
+answer(Id, Cmd, StateData) ->
     Handle = StateData#sstate.handle,
     {ok, _RetValue, _RetCmd} = yate:send_msg(Handle, call.answered, [{id, dict:fetch(targetid, Cmd#command.keys)}, {targetid, Id}]),
-    {ok, _RetValue2, _RetCmd2} =
+    ok.
+
+record_wave(Cmd, StateData) ->
+    Handle = StateData#sstate.handle,
+    {ok, _RetValue, _RetCmd} =
 	yate:send_msg(Handle, chan.masquerade,
 		      [{message, "chan.attach"},
 		       {id, dict:fetch(targetid, Cmd#command.keys)},
@@ -104,16 +128,4 @@ handle_message(call.execute, Id, Cmd, _From, route, StateData) when Id == StateD
 		       {maxlen, 8000},
 		       {consumer, "wave/record//tmp/record.mulaw"}
 		      ]),
-    {next_state, execute, StateData};
-handle_message(chan.dtmf, Id, Cmd, From, execute, StateData) when Id == StateData#sstate.id ->
-    error_logger:info_msg("Call dtmf ~p~n", [StateData#sstate.id]),
-    yate:ret(From, Cmd, true),
-    {next_state, execute, StateData};
-handle_message(chan.hangup, Id, _Cmd, _From, _State, StateData) when Id == StateData#sstate.id ->
-    error_logger:info_msg("Call hangup ~p~n", [StateData#sstate.id]),
-    {stop, normal, StateData};
-handle_message(Type, _Id, Cmd, From, StateName, StateData) ->
-    error_logger:error_msg("Unsupported message in ~p: ~p~n", [?MODULE, Type]),
-    yate:ret(From, Cmd, false),
-    {next_state, StateName, StateData}.
-
+    ok.
