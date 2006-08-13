@@ -89,8 +89,7 @@ handle_cast(stop, State) ->
     {stop, normal, State};
 handle_cast({client, {ret, Cmd}, _Pid}, State) ->
     Processed = (Cmd#command.header)#message.processed,
-    yate_conn:ret(State#sstate.conn, Cmd, Processed),
-    {noreply, State};
+    handle_ret(Processed, Cmd, State);
 %% handle_cast({cast, {ans, RetValue, RetCmd}, From}, State) ->
 %%     error_logger:info_msg("Ans in ~p: ~p~n", [?MODULE, RetValue]),
 %%     gen_server:reply(From, {ok, RetValue, RetCmd}),
@@ -125,11 +124,10 @@ handle_command(Type, _Dir, _Cmd, _From, State) ->
 handle_request(Name, Cmd, _From, State) ->
     case dict:find(Name, State#sstate.installed) of
 	{ok, EntryList} ->
-	    Id = Cmd#command.id,
-	    {ok, NewEntryList} = send_once(req, Cmd, EntryList),
-	    Pending = dict:store(Id, NewEntryList, State#sstate.pending),
-	    {noreply, State#sstate{pending=Pending}};
+	    send_pending(Cmd, EntryList, State);
 	error ->
+%%	    yate_conn:ret(State#sstate.conn, Cmd, false),
+	    error_logger:error_msg("Unhandled request in ~p: ~p~n", [?MODULE, Name]),
 	    {noreply, State}
     end.
 
@@ -138,9 +136,34 @@ handle_answer(Name, Cmd, _From, State) ->
 	{ok, EntryList} ->
 	    send_all(ans, Cmd, EntryList);
 	error ->
+	    error_logger:error_msg("Unhandled answer in ~p: ~p~n", [?MODULE, Name]),
 	    ok
     end,
     {noreply, State}.
+
+handle_ret(true, Cmd, State) ->
+    Id = Cmd#command.id,
+    Pending = dict:erase(Id, State#sstate.pending),
+    yate_conn:ret(State#sstate.conn, Cmd, true),
+    {noreply, State#sstate{pending=Pending}};
+
+handle_ret(false, Cmd, State) ->
+    Id = Cmd#command.id,
+    Pending = State#sstate.pending,
+    EntryList = dict:fetch(Id, Pending),
+    send_pending(Cmd, EntryList, State).
+
+
+send_pending(Cmd, EntryList, State) ->
+    case send_once(req, Cmd, EntryList) of
+	{ok, NewEntryList} ->
+	    Id = Cmd#command.id,
+	    NewPending = dict:store(Id, NewEntryList, State#sstate.pending),
+	    {noreply, State#sstate{pending=NewPending}};
+	error ->
+	    yate_conn:ret(State#sstate.conn, Cmd, false),
+	    {noreply, State}
+    end.
 
 
 %% @doc Send Cmd to all entries at once
@@ -166,7 +189,7 @@ send_once(Type, Cmd, [Entry|R]) ->
 	    send_once(Type, Cmd, R)
     end;
 send_once(_Type, _Cmd, []) ->
-    {ok, []}.
+    error.
 
 
 install(Type, Name, Pid, Fun, State, Installed) ->
