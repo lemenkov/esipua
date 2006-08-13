@@ -7,7 +7,7 @@ beam_FILES = $(erl_FILES:.erl=.beam)
 
 ERLC = erlc
 
-all: $(beam_FILES)
+all: $(beam_FILES) yate.boot
 
 clean:
 	$(RM) $(beam_FILES) yate.boot yate.script yate.app
