@@ -74,7 +74,7 @@ handle_call({call, {watch, Name, Fun}, Pid}, _From, State) ->
 handle_call({call, {unwatch, Name}, Pid}, _From, State) ->
     Installed = State#sstate.watched,
     {ok, NewInstalled, NewPids} = uninstall(watch, Name, Pid, State, Installed),
-    {noreply, State#sstate{watched=NewInstalled, pids=NewPids}};
+    {reply, ok, State#sstate{watched=NewInstalled, pids=NewPids}};
 
 handle_call({call, {msg, Name, Keys}, _Pid}, From, State) ->
     ok = yate_conn:queue_msg(State#sstate.conn, Name, Keys, From),
