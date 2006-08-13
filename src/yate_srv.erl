@@ -187,7 +187,6 @@ uninstall(Type, Name, Pid, State, Installed) ->
     NewInstallList = [InstallEntry || InstallEntry <- InstallList, InstallEntry#install_entry.pid =/= Pid],
     PidList = dict:fetch(Pid, State#sstate.pids),
     NewPidList = [PidEntry || PidEntry <- PidList, PidEntry#pidentry.name =/= Name],
-    error_logger:info_msg("uninstall ~p ~p ~p ~p~n", [Name, Pid, NewInstallList, NewPidList]),
     case NewInstallList of
 	[] ->
 	    NewInstalled = dict:erase(Name, Installed),
