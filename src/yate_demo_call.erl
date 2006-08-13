@@ -18,13 +18,14 @@
 
 -include("yate.hrl").
 
-start_link(Handle, Id) ->
-    gen_fsm:start_link(yate_demo_call, [Handle, Id], []).
+start_link(Client, Id) ->
+    gen_fsm:start_link(yate_demo_call, [Client, Id], []).
 
 
 %% gen_fsm
-init([Handle, Id]) ->
+init([Client, Id]) ->
     error_logger:info_msg("Init call ~p~n", [Id]),
+    {ok, Handle} = yate:open(Client),
     ok = yate:watch(Handle, call.execute, 
 		    fun(Cmd) ->
 			    CmdId = dict:fetch(id, Cmd#command.keys),
@@ -85,7 +86,8 @@ code_change(_OldVsn, StateName, StateData, _Extra)  ->
 
 
 handle_command(message, Id, Cmd, From, StateName, StateData) ->
-    handle_message((Cmd#command.header)#message.name, Id, Cmd, From, StateName, StateData);
+    Name = (Cmd#command.header)#message.name,
+    handle_message(Name, Id, Cmd, From, StateName, StateData);
 handle_command(Type, _Id, _Cmd, _From, StateName, StateData) ->
     error_logger:error_msg("Unsupported command: ~p~n", [Type]),
     {next_state, StateName, StateData}.

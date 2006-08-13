@@ -20,7 +20,7 @@
 	 handle_info/2,
 	 terminate/2]).
 
--record(sstate, {handle, calls=dict:new()}).
+-record(sstate, {handle, client}).
 
 -define(SERVER, ?MODULE).
 -define(HOST, localhost).
@@ -33,7 +33,6 @@
 %% @end
 %%--------------------------------------------------------------------
 run() ->
-    ok = error_logger:logfile({open, "yate.log"}),
     yate_sup:start_link(),
     {ok, Client} = yate:connect(?HOST, ?PORT),
     {ok, _Pid} = start_link(Client),
@@ -70,8 +69,7 @@ init([Client]) ->
 		      fun(Cmd) ->
 			      dict:fetch(called, Cmd#command.keys) == "99991009"
 		      end),
-%%     ok = yate:uninstall(Handle, call.route),
-    {ok, #sstate{handle=Handle}}.
+    {ok, #sstate{handle=Handle, client=Client}}.
 
 
 code_change(_OldVsn, State, _Extra) ->
@@ -97,56 +95,31 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    Handle = State#sstate.handle,
+    yate:uninstall(Handle, call.route),
     terminated.
 
 
 handle_command(message, req, Cmd, From, State) ->
     handle_message((Cmd#command.header)#message.name, Cmd, From, State);
-handle_command(message, ans, Cmd, From, State) ->
-    Id = case dict:find(id, Cmd#command.keys) of
-	     {ok, Id2} ->
-		 Id2;
-	     error ->
-		 ""
-    end,
-    case dict:find(Id, State#sstate.calls) of
-	{ok, Call} ->
-	    Call ! {yate, ans, Cmd, From},
-	    {noreply, State};
-	error ->
-	    Header = Cmd#command.header,
-	    error_logger:error_msg("Unhandled answer: ~p~n", [Header#message.name]),
-	    {noreply, State}
-    end;
+handle_command(message, ans, Cmd, _From, State) ->
+    Header = Cmd#command.header,
+    error_logger:error_msg("Unhandled answer message in ~p: ~p~n", [?MODULE, Header#message.name]),
+    {noreply, State};
 handle_command(Type, req, Cmd, _From, State) ->
     Handle = State#sstate.handle,
     yate:ret(Handle, Cmd, false),
-    error_logger:error_msg("Unhandled request: ~p~n", [Type]),
+    error_logger:error_msg("Unhandled request in ~p: ~p~n", [?MODULE, Type]),
     {noreply, State};
 handle_command(Type, ans, _Cmd, _From, State) ->
-    error_logger:error_msg("Unhandled answer: ~p~n", [Type]),
+    error_logger:error_msg("Unhandled answer in ~p: ~p~n", [?MODULE, Type]),
     {noreply, State}.
 
 
-handle_message(Name, Cmd, From, State) ->
-    Id = case dict:find(id, Cmd#command.keys) of
-	     {ok, Id2} ->
-		 Id2;
-	     error ->
-		 ""
-    end,
-    case dict:find(Id, State#sstate.calls) of
-	{ok, Call} ->
-	    Call ! {yate, req, Cmd, From},
-	    {noreply, State};
-	error ->
-	    default_handle_message(Name, Cmd, From, State)
-    end.
-
-default_handle_message(call.route, Cmd, From, State) ->
+handle_message(call.route, Cmd, From, State) ->
     handle_call_route(dict:fetch(called, Cmd#command.keys), Cmd, From, State);
-default_handle_message(Type, Cmd, _From, State) ->
+handle_message(Type, Cmd, _From, State) ->
     Handle = State#sstate.handle,
     yate:ret(Handle, Cmd, false),
     error_logger:error_msg("Unhandled message request: ~p~n", [Type]),
@@ -154,12 +127,11 @@ default_handle_message(Type, Cmd, _From, State) ->
 
 handle_call_route("99991009", Cmd, _From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
-    {ok, Pid} = yate_demo_call:start_link(State#sstate.handle, Id),
-    Calls = dict:store(Id, Pid, State#sstate.calls),
+    {ok, _Pid} = yate_demo_call:start_link(State#sstate.client, Id),
     Handle = State#sstate.handle,
     yate:ret(Handle, Cmd, true, "dumb/"),
 %%    yate:ret(From, Cmd, true, "tone/dial"),
-    {noreply, State#sstate{calls=Calls}};
+    {noreply, State};
 handle_call_route(Called, Cmd, _From, State) ->
     Handle = State#sstate.handle,
     yate:ret(Handle, Cmd, false),
