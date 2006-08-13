@@ -119,7 +119,7 @@ handle_command(message, ans, Cmd, From, State) ->
 	    error_logger:error_msg("Unhandled answer: ~p~n", [Header#message.name]),
 	    {noreply, State}
     end;
-handle_command(Type, req, Cmd, From, State) ->
+handle_command(Type, req, Cmd, _From, State) ->
     Handle = State#sstate.handle,
     yate:ret(Handle, Cmd, false),
     error_logger:error_msg("Unhandled request: ~p~n", [Type]),
@@ -146,13 +146,13 @@ handle_message(Name, Cmd, From, State) ->
 
 default_handle_message(call.route, Cmd, From, State) ->
     handle_call_route(dict:fetch(called, Cmd#command.keys), Cmd, From, State);
-default_handle_message(Type, Cmd, From, State) ->
+default_handle_message(Type, Cmd, _From, State) ->
     Handle = State#sstate.handle,
     yate:ret(Handle, Cmd, false),
     error_logger:error_msg("Unhandled message request: ~p~n", [Type]),
     {noreply, State}.
 
-handle_call_route("99991009", Cmd, From, State) ->
+handle_call_route("99991009", Cmd, _From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
     {ok, Pid} = yate_demo_call:start_link(State#sstate.handle, Id),
     Calls = dict:store(Id, Pid, State#sstate.calls),
@@ -160,7 +160,7 @@ handle_call_route("99991009", Cmd, From, State) ->
     yate:ret(Handle, Cmd, true, "dumb/"),
 %%    yate:ret(From, Cmd, true, "tone/dial"),
     {noreply, State#sstate{calls=Calls}};
-handle_call_route(Called, Cmd, From, State) ->
+handle_call_route(Called, Cmd, _From, State) ->
     Handle = State#sstate.handle,
     yate:ret(Handle, Cmd, false),
     error_logger:error_msg("Unhandled call.route to: ~p~n", [Called]),
