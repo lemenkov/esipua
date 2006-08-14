@@ -6,14 +6,18 @@ yate_reg_srv.erl yate_app.erl
 beam_FILES = $(erl_FILES:.erl=.beam)
 
 ERLC = erlc
+ERL = erl
 
 all: $(beam_FILES) yate.boot
 
 clean:
 	$(RM) $(beam_FILES) yate.boot yate.script yate.app
 
+run:
+	$(ERL) -boot yate -s yate_demo run
+
 %.beam: %.erl
-	erlc -I ../include $<
+	$(ERLC) -I ../include $<
 
 %.app: %.app-in
 	cp $< $@
