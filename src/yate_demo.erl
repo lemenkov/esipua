@@ -69,6 +69,11 @@ init([Client]) ->
 		      fun(Cmd) ->
 			      dict:fetch(called, Cmd#command.keys) == "99991009"
 		      end),
+    ok = yate:install(Handle, call.execute,
+		      fun(Cmd) ->
+			      Callto = dict:fetch(callto, Cmd#command.keys),
+			      Callto == "erl/test"
+		      end),
     {ok, #sstate{handle=Handle, client=Client}}.
 
 
@@ -117,6 +122,16 @@ handle_command(Type, ans, _Cmd, _From, State) ->
     {noreply, State}.
 
 
+handle_message(call.execute, Cmd, _From, State) ->
+    Callto = dict:fetch(callto, Cmd#command.keys),
+    Id = dict:fetch(id, Cmd#command.keys),
+    Handle = State#sstate.handle,
+    NewKeys = dict:store(callto, "dumb/", Cmd#command.keys),
+    error_logger:info_msg("Call execute to ~p.~n", [Callto]),
+
+    {ok, _Pid} = yate_demo_call:start_link(State#sstate.client, Id),
+    yate:ret(Handle, Cmd#command{keys=NewKeys}, false),
+    {noreply, State};
 handle_message(call.route, Cmd, From, State) ->
     handle_call_route(dict:fetch(called, Cmd#command.keys), Cmd, From, State);
 handle_message(Type, Cmd, _From, State) ->
