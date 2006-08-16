@@ -111,10 +111,7 @@ code_change(_OldVsn, StateName, StateData, _Extra)  ->
 
 handle_command(message, Id, Cmd, From, StateName, StateData) ->
     Name = (Cmd#command.header)#message.name,
-    handle_message(Name, Id, Cmd, From, StateName, StateData);
-handle_command(Type, _Id, _Cmd, _From, StateName, StateData) ->
-    error_logger:error_msg("Unsupported command: ~p~n", [Type]),
-    {next_state, StateName, StateData}.
+    handle_message(Name, Id, Cmd, From, StateName, StateData).
 
 
 handle_message(call.execute, Id, Cmd, _From, route, StateData) ->
@@ -127,12 +124,7 @@ handle_message(chan.dtmf, _Id, Cmd, _From, execute, StateData) ->
     handle_dtmf(Text, Cmd, execute, StateData);
 handle_message(chan.hangup, _Id, _Cmd, _From, _State, StateData) ->
     error_logger:info_msg("Call hangup ~p~n", [StateData#sstate.id]),
-    {stop, normal, StateData};
-handle_message(Type, _Id, Cmd, _From, StateName, StateData) ->
-    Handle = StateData#sstate.handle,
-    error_logger:error_msg("Unsupported message in ~p: ~p~n", [?MODULE, Type]),
-    yate:ret(Handle, Cmd, false),
-    {next_state, StateName, StateData}.
+    {stop, normal, StateData}.
 
 handle_dtmf(Text, Cmd, execute, StateData) ->
     Handle = StateData#sstate.handle,
