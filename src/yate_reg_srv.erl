@@ -13,7 +13,7 @@
 	 handle_info/2,
 	 terminate/2]).
 
--record(sstate, {connections=dict:new()}).
+-record(sstate, {connections=dict:new(), code=dict:new()}).
 
 -define(SERVER, ?MODULE).
 

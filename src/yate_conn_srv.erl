@@ -26,9 +26,22 @@
 
 -define(SERVER, ?MODULE).
 
-start_link(Host, Port, Pid) ->
-    gen_server:start_link(?MODULE, [Host, Port, Pid], []).
 
+%%--------------------------------------------------------------------
+%% @spec start_link() -> Result
+%%           Result = {ok, Pid} | {error, Reason}
+%% @doc Start server and connect to Yate as external module
+%% @end
+%%--------------------------------------------------------------------
+start_link(Host, Port, Pid) ->
+    gen_server:start_link(?MODULE, [Host, Port, Pid], [{timeout, 1000}]).
+
+
+%%--------------------------------------------------------------------
+%% @spec stop() -> ok
+%% @doc Stop server
+%% @end
+%%--------------------------------------------------------------------
 stop(Pid) ->
     gen_server:cast(Pid, stop).
 
@@ -38,12 +51,27 @@ stop(Pid) ->
 init([Host, Port, Pid]) ->
     init([Host, Port, Pid, []]);
 init([Host, Port, Pid, Options]) ->
+    error_logger:info_msg("Start ~p ~p~n", [?MODULE, self()]),
     NewOptions = Options ++ [list, {packet, line}],
-    {ok, Sock} = gen_tcp:connect(Host, Port, NewOptions),
+    {ok, Sock} = do_connect(Host, Port, NewOptions),
     Header = #connect{role=global,type=""},
     Cmd = #command{id=erl,header=Header,type=connect},
     ok = send_command(Sock, req, Cmd),
     {ok, #sstate{sock=Sock,pid=Pid}}.
+
+%%
+%% @doc retry connect if refused until it succeeds
+do_connect(Host, Port, Options) ->
+    case gen_tcp:connect(Host, Port, Options) of
+	{ok, Sock} ->
+	    {ok, Sock};
+	{error,econnrefused} ->
+	    receive
+	    after
+		1000 ->
+		    do_connect(Host, Port, Options)
+	    end
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -117,9 +145,9 @@ handle_cast(Request, State) ->
 handle_info({tcp, _Socket, Data}, State) ->
     {ok, NewState} = handle_tcp(Data, State),
     {noreply, NewState};
-handle_info({tcp_closed, _Socket, Reason}, State) ->
-    error_logger:info_msg("TCP closed: ~p~n", [Reason]),
-    {noreply, State};
+handle_info({tcp_closed, Socket}, State) ->
+    error_logger:info_msg("stop TCP closed~n"),
+    {stop, {tcp_closed, Socket}, State};
 handle_info({tcp_error, _Socket, Reason}, State) ->
     error_logger:info_msg("TCP error: ~p~n", [Reason]),
     {noreply, State};
@@ -128,7 +156,8 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 
-terminate(_Reason, _State) ->
+terminate(Reason, _State) ->
+    error_logger:error_msg("~p terminated ~p~n", [?MODULE, Reason]),
     terminated.
 
 

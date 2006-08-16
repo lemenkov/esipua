@@ -6,7 +6,6 @@
 -module(yate_decode).
 
 -export([decode_command/1]).
-%%-export([decode_data/1, decode_command/1, decode_key/1, decode_key/2, decode_keys/1, decode_keys/2, unescape/1, unescape_string/2, unescape_list/2, split/2]).
 
 -include("yate.hrl").
 

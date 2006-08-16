@@ -1,9 +1,9 @@
 %%%
-%%% @doc       Yate applictation module
+%%% @doc       Yate demo applictation module
 %%% @author    Mikael Magnusson <mikma@users.sourceforge.net>
 %%% @copyright 2006 Mikael Magnusson
 %%%
--module(yate_app).
+-module(yate_demo_app).
 
 -behaviour(application).
 
@@ -20,12 +20,11 @@ start(normal, []) ->
 stop(_State) ->
     ok.
 
-
 %%--------------------------------------------------------------------
 %% @spec start() -> Result
 %%           Result = {ok, Pid} | {error, Reason}
-%% @doc Start top supervisor of the Yate application
+%% @doc Start demo application
 %% @end
 %%--------------------------------------------------------------------
 start() ->
-    yate_port_sup:start_link().
+    yate_demo_sup:start_link().

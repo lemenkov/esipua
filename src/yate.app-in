@@ -4,13 +4,13 @@
   {modules, [
 	     yate,
 	     yate_app,
-	     yate_sup,
 	     yate_srv,
 	     yate_conn,
 	     yate_conn_srv,
 	     yate_decode,
 	     yate_encode,
-	     yate_reg_srv,
+	     yate_port_srv,
+	     yate_port_sup,
 	     yate_util
 	    ]},
   {registered, [
@@ -20,4 +20,4 @@
   {mod, {yate_app, []}},
   {env, []},
   {applications,
-        [kernel, stdlib]}]}.
+        [kernel, stdlib, sasl]}]}.

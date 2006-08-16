@@ -7,7 +7,7 @@
 
 %% api
 %%-export([connect/2, stop/1, install/2, install/3, uninstall/2, watch/2, unwatch/2, ret/3, ret/4, queue_msg/3, send_msg/3]).
--export([connect/2, open/1, install/3, uninstall/2, watch/3, unwatch/2, ret/3, ret/4, queue_msg/4, send_msg/3]).
+-export([connect/2, open/1, close/1, install/3, uninstall/2, watch/3, unwatch/2, ret/3, ret/4, queue_msg/4, send_msg/3]).
 
 -include("yate.hrl").
 
@@ -20,7 +20,8 @@
 %% @end
 %%--------------------------------------------------------------------
 connect(Host, Port) ->
-    yate_sup:start_client(Host, Port).
+%%    yate_sup:start_client(Host, Port).
+    yate_port_sup:start_client(Host, Port).
 
 %%--------------------------------------------------------------------
 %% @spec link(Conn) -> Result
@@ -30,7 +31,12 @@ connect(Host, Port) ->
 %%--------------------------------------------------------------------
 open(Client) ->
     UserPid = self(),
+    link(Client),
     {ok, {yate_client, Client, UserPid}}.
+
+close({yate_client, Client, _UserPid}) ->
+    unlink(Client),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @spec watch(Handle, Name, Fun) -> true

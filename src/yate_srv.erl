@@ -10,7 +10,7 @@
 -behaviour(gen_server).
 
 %% api
--export([start_link/0, stop/1, connect/3]).
+-export([start_link/2, stop/1, connect/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -31,13 +31,33 @@
 
 -define(SERVER, ?MODULE).
 
-start_link() ->
-    {ok, Pid} = gen_server:start_link(?MODULE, [], []),
-    {ok, Pid}.
 
+%%--------------------------------------------------------------------
+%% @spec start_link() -> Result
+%%           Result = {ok, Pid} | {error, Reason}
+%% @doc Start server and connect to Yate as external module
+%% @end
+%%--------------------------------------------------------------------
+start_link(Host, Port) ->
+    error_logger:info_msg("Start ~p~n", [?MODULE]),
+    gen_server:start_link(?MODULE, [Host, Port], []).
+
+
+%%--------------------------------------------------------------------
+%% @spec connect(Handle, Host, Port) -> Result
+%%           Result = {ok, Pid} | {error, Reason}
+%% @doc Connect to Yate as external module
+%% @end
+%%--------------------------------------------------------------------
 connect(Handle, Host, Port) ->
     gen_server:call(Handle, {connect, Host, Port}).
 
+
+%%--------------------------------------------------------------------
+%% @spec stop() -> ok
+%% @doc Stop server
+%% @end
+%%--------------------------------------------------------------------
 stop(Pid) ->
     gen_server:cast(Pid, stop).
 
@@ -45,9 +65,14 @@ stop(Pid) ->
 %%
 %% gen_server callbacks
 %%
-init([]) ->
-    {ok, #sstate{}}.
-
+init([Host, Port]) ->
+    error_logger:info_msg("Start ~p ~p~n", [?MODULE, self()]),
+    error_logger:info_msg("Connecting ~p~n", [?MODULE]),
+    {ok, Conn} = yate_conn_srv:start_link(Host, Port, self()),
+    error_logger:info_msg("Connected ~p~n", [?MODULE]),
+%%    link(Conn),
+%%    process_flag(trap_exit, true),
+    {ok, #sstate{conn=Conn}}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -104,12 +129,15 @@ handle_info({yate, Dir, Cmd, From}, State) ->
 handle_info({cast, {ans, RetValue, RetCmd}, From}, State) ->
     gen_server:reply(From, {ok, RetValue, RetCmd}),
     {noreply, State};
+handle_info({'EXIT', Pid, Reason}, State) ->
+    {stop, {'EXIT', Pid, Reason}, State};
 handle_info(Info, State) ->
     error_logger:error_msg("Unsupported info in ~p: ~p~n", [?MODULE, Info]),
     {noreply, State}.
 
 
-terminate(_Reason, _State) ->
+terminate(Reason, _State) ->
+    error_logger:error_msg("~p terminated ~p~n", [?MODULE, Reason]),
     terminated.
 
 
