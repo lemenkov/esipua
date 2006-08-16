@@ -1,4 +1,4 @@
-erl_FILES = make.erl yate_demo_call.erl yate_srv.erl yate_demo.erl	\
+erl_FILES = yate_demo_call.erl yate_srv.erl yate_demo.erl	\
 yate_conn.erl yate_encode.erl yate_test.erl		\
 yate_conn_srv.erl yate.erl yate_util.erl yate_decode.erl		\
 yate_app.erl yate_demo_sup.erl yate_demo_app.erl	\
