@@ -127,22 +127,6 @@ handle_call_execute("erl " ++ String, Cmd, _From, State) ->
 %% 		 temporary, 10, worker, [ModuleName]},
 %%     yate_demo_sup:start_child(ChildSpec),
    apply(ModuleName, Func, [State#sstate.client, Cmd, Args]),
-
-%%     error_logger:info_msg("Call compile ~p.~n", [File]),
-%%     case compile:file(File, [binary, return, {i, "../include"}]) of
-%% 	{ok, ModuleName, _Binary, _WarningList} ->
-%% 	    error_logger:info_msg("Compile successfull ~p~n", [ModuleName]),
-%% 	    Func = list_to_atom(FuncStr),
-%%          NewKeys = dict:store(callto, "dumb/", Cmd#command.keys),
-%% 	    NewCmd = Cmd#command{keys=NewKeys},
-%% 	    apply(ModuleName, Func, [State#sstate.client, NewCmd, Args]),
-%% %%	    {ok, _Pid} = yate_demo_call:start_link(State#sstate.client, Id),
-%%          Handle = State#sstate.handle,
-%% 	    yate:ret(Handle, NewCmd, false);
-%% 	{error, ErrorList, WarningList} ->
-%% 	    error_logger:info_msg("Compile failed ~p ~p~n", [ErrorList, WarningList]),
-%% 	    yate:ret(Handle, Cmd, false)
-%%     end,
     {noreply, State}.
 
 
@@ -158,18 +142,3 @@ handle_call_route(Called, Cmd, _From, State) ->
     yate:ret(Handle, Cmd, false),
     error_logger:error_msg("Unhandled call.route to: ~p~n", [Called]),
     {noreply, State}.
-
-
-%% sendroute() ->
-%%     {ok, RetValue, _RetCmd} =
-%% 	yate:send_msg(Pid, call.route,
-%% 		      [{id, "erlang/bogus"},
-%% 		       {module, erlang},
-%% %%		       {status, incoming},
-%% %%		       {address, "0.0.0.0:0"},
-%% %%		       {answered, false},
-%% 		       {called, "99991001"},
-%% 		       {caller, anonymous},
-%% 		       {callername, "Anonymous"}]),
-%%     error_logger:info_msg("call.route ~p~n", [RetValue]),
-%%     ok.
