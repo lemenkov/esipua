@@ -64,15 +64,6 @@ stop() ->
 init([]) ->
     error_logger:info_msg("start ~p~n", [?MODULE]),
     {ok, Client} = yate:connect(?HOST, ?PORT),
-
-%%     {ok, Client} = case (catch yate:connect(?HOST, ?PORT)) of
-%%     {'EXIT', {Reason, Stack}} ->
-%%     error_logger:error_msg("Catch ~p ~p~n", [Reason, Stack]),
-%%     {error, Reason};
-%%     {ok, Client2} ->
-%%     {ok, Client2}
-%%     end,
-
     {ok, Handle} = yate:open(Client),
     ok = yate:install(Handle, call.route, 
 		      fun(Cmd) ->
