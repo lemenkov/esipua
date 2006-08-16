@@ -1,1 +1,5 @@
-["yate.erl", "yate_sup.erl"].
+{["yate_demo_call", "yate_srv", "yate_demo",
+"yate_conn", "yate_encode", "yate_test",
+"yate_conn_srv", "yate", "yate_util", "yate_decode",
+"yate_app", "yate_demo_sup", "yate_demo_app",
+"yate_port_srv", "yate_port_sup"], [load, {i, "../include"}]}.
