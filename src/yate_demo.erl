@@ -82,25 +82,18 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
-handle_call(Request, _From, State) ->
-    error_logger:error_msg("Unhandled call: ~p~n", [Request]),
-    {reply, ok, State}.
+handle_call(Request, _From, _State) ->
+    exit({unhandled, request, Request}).
 
 
 handle_cast(stop, State) ->
-    {stop, normal, State};
-handle_cast(Request, State) ->
-    error_logger:error_msg("Unhandled cast: ~p~n", [Request]),
-    {noreply, State}.
+    {stop, normal, State}.
 
 
 handle_info({yate, Dir, Cmd, From}, State) ->
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
 handle_info({'EXIT', Pid, Reason}, State) ->
     error_logger:error_msg("EXIT: ~p ~p~n", [Pid, Reason]),
-    {noreply, State};
-handle_info(Info, State) ->
-    error_logger:error_msg("Unhandled info: ~p~n", [Info]),
     {noreply, State}.
 
 
@@ -111,19 +104,7 @@ terminate(_Reason, State) ->
 
 
 handle_command(message, req, Cmd, From, State) ->
-    handle_message((Cmd#command.header)#message.name, Cmd, From, State);
-handle_command(message, ans, Cmd, _From, State) ->
-    Header = Cmd#command.header,
-    error_logger:error_msg("Unhandled answer message in ~p: ~p~n", [?MODULE, Header#message.name]),
-    {noreply, State};
-handle_command(Type, req, Cmd, _From, State) ->
-    Handle = State#sstate.handle,
-    yate:ret(Handle, Cmd, false),
-    error_logger:error_msg("Unhandled request in ~p: ~p~n", [?MODULE, Type]),
-    {noreply, State};
-handle_command(Type, ans, _Cmd, _From, State) ->
-    error_logger:error_msg("Unhandled answer in ~p: ~p~n", [?MODULE, Type]),
-    {noreply, State}.
+    handle_message((Cmd#command.header)#message.name, Cmd, From, State).
 
 
 handle_message(call.execute, Cmd, From, State) ->
@@ -131,12 +112,7 @@ handle_message(call.execute, Cmd, From, State) ->
     error_logger:info_msg("Call execute ~p.~n", [Callto]),
     handle_call_execute(Callto, Cmd, From, State);
 handle_message(call.route, Cmd, From, State) ->
-    handle_call_route(dict:fetch(called, Cmd#command.keys), Cmd, From, State);
-handle_message(Type, Cmd, _From, State) ->
-    Handle = State#sstate.handle,
-    yate:ret(Handle, Cmd, false),
-    error_logger:error_msg("Unhandled message request: ~p~n", [Type]),
-    {noreply, State}.
+    handle_call_route(dict:fetch(called, Cmd#command.keys), Cmd, From, State).
 
 
 handle_call_execute("erl " ++ String, Cmd, _From, State) ->
