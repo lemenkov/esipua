@@ -109,14 +109,14 @@ handle_command(message, req, Cmd, From, State) ->
 
 handle_message(call.execute, Cmd, From, State) ->
     Callto = dict:fetch(callto, Cmd#command.keys),
-    error_logger:info_msg("Call execute ~p.~n", [Callto]),
+    error_logger:info_msg("Handle Call execute ~p.~n", [Callto]),
     handle_call_execute(Callto, Cmd, From, State);
 handle_message(call.route, Cmd, From, State) ->
     handle_call_route(dict:fetch(called, Cmd#command.keys), Cmd, From, State).
 
 
-handle_call_execute("erl " ++ String, Cmd, _From, State) ->
-    [File, FuncStr | Args] = string:tokens(String, " "),
+handle_call_execute("erl/" ++ String, Cmd, _From, State) ->
+    [File, FuncStr | Args] = string:tokens(String, "/"),
 
     ModuleName = list_to_atom(File),
     Func = list_to_atom(FuncStr),
@@ -127,12 +127,16 @@ handle_call_execute("erl " ++ String, Cmd, _From, State) ->
 %% 		 temporary, 10, worker, [ModuleName]},
 %%     yate_demo_sup:start_child(ChildSpec),
    apply(ModuleName, Func, [State#sstate.client, Cmd, Args]),
+    {noreply, State};
+handle_call_execute(_Called, Cmd, _From, State) ->
+    Handle = State#sstate.handle,
+    yate:ret(Handle, Cmd, false),
     {noreply, State}.
 
 
 handle_call_route("99991009", Cmd, _From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
-    {ok, _Pid} = yate_demo_call:start_link(State#sstate.client, Id),
+    {ok, _Pid} = yate_demo_call:start_link(State#sstate.client, Id, Cmd, []),
     Handle = State#sstate.handle,
     yate:ret(Handle, Cmd, true, "dumb/"),
 %%    yate:ret(From, Cmd, true, "tone/dial"),
