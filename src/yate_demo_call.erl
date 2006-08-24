@@ -46,16 +46,6 @@ init([Client, Id, ExecCmd, _Args]) ->
 			    CmdId = dict:fetch(id, Cmd#command.keys),
 			    Id == CmdId
 		    end),
-    ok = yate:watch(Handle, chan.hangup,
-		    fun(Cmd) ->
-			    CmdId = dict:fetch(id, Cmd#command.keys),
-			    Id == CmdId
-		    end),
-    ok = yate:install(Handle, chan.dtmf,
-		    fun(Cmd) ->
-			    CmdId = dict:fetch(id, Cmd#command.keys),
-			    Id == CmdId
-		    end),
 %%     ok = yate:install(Handle, chan.notify),
 
     NewKeys = dict:store(callto, "dumb/", ExecCmd#command.keys),
@@ -85,12 +75,7 @@ handle_sync_event(_Event, _From, StateName, StateData) ->
 
 
 handle_info({yate, _Dir, Cmd, From}, StateName, StateData) ->
-    Id = case dict:find(id, Cmd#command.keys) of
-	     {ok, MyId} ->
-		 MyId;
-	     error ->
-		 ""
-	 end,
+    Id = dict:fetch(id, Cmd#command.keys),
     handle_command(Cmd#command.type, Id, Cmd, From, StateName, StateData);
 handle_info(Info, StateName, StateData) ->
     error_logger:error_msg("Unsupported info: ~p~n", [Info]),
@@ -115,7 +100,21 @@ handle_command(message, Id, Cmd, From, StateName, StateData) ->
 
 
 handle_message(call.execute, Id, Cmd, _From, route, StateData) ->
-    error_logger:info_msg("Call execute ~p. answer~n", [Id]),
+    Peerid = dict:fetch(peerid, Cmd#command.keys),
+    error_logger:info_msg("Call execute ~p. answer~n", [Peerid]),
+    ok = yate:watch(StateData#sstate.handle, chan.hangup,
+		    fun(Cmd1) ->
+			    Peerid == dict:fetch(id, Cmd1#command.keys)
+		    end),
+    ok = yate:install(StateData#sstate.handle, chan.dtmf,
+		    fun(Cmd1) ->
+			    Peerid == dict:fetch(peerid, Cmd1#command.keys)
+			    %%Peerid == dict:fetch(targetid, Cmd1#command.keys)
+		    end),
+%%     ok = yate:watch(StateData#sstate.handle, chan.notify,
+%% 		    fun(Cmd1) ->
+%% 			    Id == dict:fetch(targetid, Cmd1#command.keys)
+%% 		    end),
     ok = answer(Id, Cmd, StateData),
     ok = record_wave(Cmd, StateData),
     {next_state, execute, StateData};
@@ -139,12 +138,13 @@ answer(Id, Cmd, StateData) ->
 
 record_wave(Cmd, StateData) ->
     Handle = StateData#sstate.handle,
+    %%WaveFile = "/var/local/tmp/cvs/asterisk.net/sounds/digits/1.gsm",
     {ok, _RetValue, _RetCmd} =
 	yate:send_msg(Handle, chan.masquerade,
 		      [{message, "chan.attach"},
 		       {id, dict:fetch(targetid, Cmd#command.keys)},
 		       {notify, StateData#sstate.id},
-		       %%{source, "wave/play//var/local/tmp/cvs/asterisk.net/sounds/digits/1.gsm"}
+		       %%{source, ["wave/play/", WaveFile]}
 		       {maxlen, 8000},
 		       {consumer, "wave/record//tmp/record.mulaw"}
 		      ]),
