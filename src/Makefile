@@ -15,7 +15,7 @@ clean:
 	$(RM) $(beam_FILES) yate.boot yate.script yate.app yate_demo.boot yate_demo.script yate_demo.boot
 
 run:
-	$(ERL) -boot yate_demo -sasl sasl_error_logger '{file,"sasl.log"}'
+	$(ERL) -boot yate_demo -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/eryate/db"'
 #	$(ERL) -boot yate -sasl sasl_error_logger '{file,"sasl.log"}'
 
 %.beam: %.erl
