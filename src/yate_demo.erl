@@ -126,9 +126,7 @@ handle_call_execute("erl/" ++ String, Cmd, From, State) ->
 %%     ChildSpec = {Id, {ModuleName, Func, [State#sstate.client, Cmd, Args]},
 %% 		 temporary, 10, worker, [ModuleName]},
 %%     yate_demo_sup:start_child(ChildSpec),
-    error_logger:info_msg("Before"),
-   apply(ModuleName, Func, [State#sstate.client, Cmd, From, Args]),
-    error_logger:info_msg("After"),
+    apply(ModuleName, Func, [State#sstate.client, Cmd, From, Args]),
 
     {noreply, State};
 handle_call_execute(_Called, Cmd, From, State) ->
