@@ -120,17 +120,10 @@ handle_call_execute("erl/" ++ String, Cmd, From, State) ->
 
     ModuleName = list_to_atom(File),
     Func = list_to_atom(FuncStr),
-
-    %%IdStr = dict:fetch(id, Cmd#command.keys),
-    %%Id = list_to_atom(IdStr),
-%%     ChildSpec = {Id, {ModuleName, Func, [State#sstate.client, Cmd, Args]},
-%% 		 temporary, 10, worker, [ModuleName]},
-%%     yate_demo_sup:start_child(ChildSpec),
     apply(ModuleName, Func, [State#sstate.client, Cmd, From, Args]),
 
     {noreply, State};
 handle_call_execute(_Called, Cmd, From, State) ->
-%%     Handle = State#sstate.handle,
     yate:ret(From, Cmd, false),
     {noreply, State}.
 
@@ -138,12 +131,10 @@ handle_call_execute(_Called, Cmd, From, State) ->
 handle_call_route("99991009", Cmd, From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
     {ok, _Pid} = yate_demo_call:start_link(State#sstate.client, Id, Cmd, []),
-%%     Handle = State#sstate.handle,
     yate:ret(From, Cmd, true, "dumb/"),
 %%    yate:ret(From, Cmd, true, "tone/dial"),
     {noreply, State};
 handle_call_route(Called, Cmd, From, State) ->
-%%     Handle = State#sstate.handle,
     yate:ret(From, Cmd, false),
     error_logger:error_msg("Unhandled call.route to: ~p~n", [Called]),
     {noreply, State}.
