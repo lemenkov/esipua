@@ -20,7 +20,7 @@
 	 handle_info/2,
 	 terminate/2]).
 
--record(sstate, {handle, client}).
+-record(state, {handle, client}).
 
 -define(SERVER, ?MODULE).
 -define(HOST, localhost).
@@ -75,7 +75,7 @@ init([]) ->
 %% 			      Callto = dict:fetch(callto, Cmd#command.keys),
 %% 			      Callto == "erl/test"
 		      end),
-    {ok, #sstate{handle=Handle, client=Client}}.
+    {ok, #state{handle=Handle, client=Client}}.
 
 
 code_change(_OldVsn, State, _Extra) ->
@@ -98,7 +98,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 
 
 terminate(_Reason, State) ->
-    Handle = State#sstate.handle,
+    Handle = State#state.handle,
     yate:uninstall(Handle, call.route),
     terminated.
 
@@ -120,7 +120,7 @@ handle_call_execute("erl/" ++ String, Cmd, From, State) ->
 
     ModuleName = list_to_atom(File),
     Func = list_to_atom(FuncStr),
-    apply(ModuleName, Func, [State#sstate.client, Cmd, From, Args]),
+    apply(ModuleName, Func, [State#state.client, Cmd, From, Args]),
 
     {noreply, State};
 handle_call_execute(_Called, Cmd, From, State) ->
@@ -130,7 +130,7 @@ handle_call_execute(_Called, Cmd, From, State) ->
 
 handle_call_route("99991009", Cmd, From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
-    {ok, _Pid} = yate_demo_call:start_link(State#sstate.client, Id, Cmd, []),
+    {ok, _Pid} = yate_demo_call:start_link(State#state.client, Id, Cmd, []),
     yate:ret(From, Cmd, true, "dumb/"),
 %%    yate:ret(From, Cmd, true, "tone/dial"),
     {noreply, State};
