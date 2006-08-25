@@ -80,9 +80,8 @@ uninstall(Handle, Name) ->
 %% @doc answer message
 %% @end
 %%--------------------------------------------------------------------
-ret(Handle, Cmd, Processed) ->
-    Header = (Cmd#command.header)#message{processed=Processed},
-    gen_server:cast(Handle, {ret, Cmd#command{header=Header}}).
+ret(Handle, Cmd, Success) ->
+    gen_server:cast(Handle, {ret, Cmd#command{success=Success}}).
 
 %%--------------------------------------------------------------------
 %% @spec ret(Handle, Cmd, Processed, Retval) -> ok
@@ -92,9 +91,9 @@ ret(Handle, Cmd, Processed) ->
 %% @doc answer message
 %% @end
 %%--------------------------------------------------------------------
-ret(Handle, Cmd, Processed, Retval) ->
-    Header = (Cmd#command.header)#message{processed=Processed},
-    gen_server:cast(Handle, {ret, Cmd#command{retvalue=Retval,header=Header}}).
+ret(Handle, Cmd, Success, Retval) ->
+    Header = (Cmd#command.header)#message{retvalue=Retval},
+    gen_server:cast(Handle, {ret, Cmd#command{success=Success,header=Header}}).
 
 %%--------------------------------------------------------------------
 %% @spec queue_msg(Handle, Name, Keys) -> ok

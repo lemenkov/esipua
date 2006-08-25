@@ -163,10 +163,10 @@ terminate(Reason, _State) ->
 
 queue_message(Name, Keys, Tag, State) ->
     Time = yate_util:seconds(),
-    Header = #message{time=Time,name=Name},
+    Header = #message{time=Time,name=Name,retvalue=""},
     KeyDict = dict:from_list(Keys),
     Id = erlang:ref_to_list(make_ref()),
-    Cmd = #command{id=Id,retvalue="",type=message,header=Header,keys=KeyDict},
+    Cmd = #command{id=Id,type=message,header=Header,keys=KeyDict},
     {ok, NewState} = queue_command(req, Cmd, Tag, State),
     {ok, NewState}.
 
@@ -188,7 +188,7 @@ handle_command(ans, Cmd, State) ->
     Key = {Cmd#command.type, Id},
     case dict:find(Key, State#sstate.pending) of
 	{ok, Tag} ->
-	    Reply = Cmd#command.retvalue,
+	    Reply = Cmd#command.success,
 	    case Tag of
 		{call, From} ->
 		    gen_server:reply(From, {ok, Reply, Cmd});

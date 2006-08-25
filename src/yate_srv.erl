@@ -21,8 +21,11 @@
 	 terminate/2]).
 
 %% pending: Dictionary of {Type, Id} -> From
--record(sstate, {conn, pids=dict:new(), installed=dict:new(),
-		 watched=dict:new(), pending=dict:new(),
+-record(sstate, {conn,
+		 pids=dict:new(),      %% Pid -> [pidentry()]
+		 installed=dict:new(), %% Name = string() -> [install_entry()]
+		 watched=dict:new(),   %% Name = string() -> [install_entry()]
+		 pending=dict:new(),   %% Id = string() -> [install_entry()]
 		 outgoing=dict:new()}).
 
 -record(pidentry, {type, name}).
@@ -71,7 +74,7 @@ init([Host, Port]) ->
     {ok, Conn} = yate_conn_srv:start_link(Host, Port, self()),
     error_logger:info_msg("Connected ~p~n", [?MODULE]),
 %%    link(Conn),
-%%    process_flag(trap_exit, true),
+    process_flag(trap_exit, true),
     {ok, #sstate{conn=Conn}}.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -113,8 +116,8 @@ handle_call(Request, _From, State) ->
 handle_cast(stop, State) ->
     {stop, normal, State};
 handle_cast({client, {ret, Cmd}, _Pid}, State) ->
-    Processed = (Cmd#command.header)#message.processed,
-    handle_ret(Processed, Cmd, State);
+    Success = Cmd#command.success,
+    handle_ret(Success, Cmd, State);
 %% handle_cast({cast, {ans, RetValue, RetCmd}, From}, State) ->
 %%     error_logger:info_msg("Ans in ~p: ~p~n", [?MODULE, RetValue]),
 %%     gen_server:reply(From, {ok, RetValue, RetCmd}),
@@ -130,7 +133,8 @@ handle_info({cast, {ans, RetValue, RetCmd}, From}, State) ->
     gen_server:reply(From, {ok, RetValue, RetCmd}),
     {noreply, State};
 handle_info({'EXIT', Pid, Reason}, State) ->
-    {stop, {'EXIT', Pid, Reason}, State};
+    error_logger:info_msg("EXIT ~p ~p ~p~n", [?MODULE, Pid, Reason]),
+    {noreply, State};
 handle_info(Info, State) ->
     error_logger:error_msg("Unsupported info in ~p: ~p~n", [?MODULE, Info]),
     {noreply, State}.

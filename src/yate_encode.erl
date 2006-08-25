@@ -37,11 +37,11 @@ encode_command(unwatch, req, Cmd) ->
     encode_data({unwatch, req, Headers, Cmd#command.keys});
 encode_command(message, ans, Cmd) ->
     Header = Cmd#command.header,
-    Headers = [Cmd#command.id, Header#message.processed, Header#message.name, Cmd#command.retvalue],
+    Headers = [Cmd#command.id, Cmd#command.success, Header#message.name, Header#message.retvalue],
     encode_data({message, ans, Headers, Cmd#command.keys});
 encode_command(message, req, Cmd) ->
     Header = Cmd#command.header,
-    Headers = [Cmd#command.id, Header#message.time, Header#message.name, Cmd#command.retvalue],
+    Headers = [Cmd#command.id, Header#message.time, Header#message.name, Header#message.retvalue],
     encode_data({message, req, Headers, Cmd#command.keys}).
 
 encode_filter(undefined) ->

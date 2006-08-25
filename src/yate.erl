@@ -7,7 +7,7 @@
 
 %% api
 %%-export([connect/2, stop/1, install/2, install/3, uninstall/2, watch/2, unwatch/2, ret/3, ret/4, queue_msg/3, send_msg/3]).
--export([connect/2, open/1, close/1, install/3, uninstall/2, watch/3, unwatch/2, ret/3, ret/4, queue_msg/4, send_msg/3]).
+-export([connect/2, open/1, dup/1, close/1, install/3, uninstall/2, watch/3, unwatch/2, ret/3, ret/4, queue_msg/4, send_msg/3]).
 
 -include("yate.hrl").
 
@@ -30,6 +30,11 @@ connect(Host, Port) ->
 %% @end
 %%--------------------------------------------------------------------
 open(Client) ->
+    UserPid = self(),
+    link(Client),
+    {ok, {yate_client, Client, UserPid}}.
+
+dup({yate_client, Client, _UserPid}) ->
     UserPid = self(),
     link(Client),
     {ok, {yate_client, Client, UserPid}}.
@@ -90,9 +95,8 @@ uninstall(Handle, Name) ->
 %% @doc answer message
 %% @end
 %%--------------------------------------------------------------------
-ret(Handle, Cmd, Processed) ->
-    Header = (Cmd#command.header)#message{processed=Processed},
-    cast(Handle, {ret, Cmd#command{header=Header}}).
+ret(Handle, Cmd, Success) ->
+    cast(Handle, {ret, Cmd#command{success=Success}}).
 
 %%--------------------------------------------------------------------
 %% @spec ret(Handle, Cmd, Processed, Retval) -> ok
@@ -102,9 +106,9 @@ ret(Handle, Cmd, Processed) ->
 %% @doc answer message
 %% @end
 %%--------------------------------------------------------------------
-ret(Handle, Cmd, Processed, Retval) ->
-    Header = (Cmd#command.header)#message{processed=Processed},
-    cast(Handle, {ret, Cmd#command{retvalue=Retval,header=Header}}).
+ret(Handle, Cmd, Success, Retval) ->
+    Header = (Cmd#command.header)#message{retvalue=Retval},
+    cast(Handle, {ret, Cmd#command{success=Success,header=Header}}).
 
 %%--------------------------------------------------------------------
 %% @spec queue_msg(Handle, Name, Keys) -> ok
@@ -129,6 +133,17 @@ queue_msg(Handle, Name, Keys, Tag) ->
 send_msg(Handle, Name, Keys) ->
     call(Handle, {msg, Name, Keys}).
 
+%% record_wave(Handle, WaveFile) ->
+%%     {ok, _RetValue, _RetCmd} =
+%% 	yate:send_msg(Handle, chan.masquerade,
+%% 		      [{message, "chan.attach"},
+%% 		       {id, dict:fetch(targetid, Cmd#command.keys)},
+%% 		       {notify, StateData#state.id},
+%% 		       {source, ["wave/play/", WaveFile]}
+%% 		       %%{maxlen, 8000},
+%% 		       %%{consumer, "wave/record//tmp/record.mulaw"}
+%% 		      ]),
+%%     ok.
 
 %%--------------------------------------------------------------------
 %% @spec stop(Handle) -> ok
