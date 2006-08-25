@@ -72,8 +72,6 @@ init([]) ->
     ok = yate:install(Handle, call.execute,
 		      fun(_Cmd) ->
 			      true
-%% 			      Callto = dict:fetch(callto, Cmd#command.keys),
-%% 			      Callto == "erl/test"
 		      end),
     {ok, #state{handle=Handle, client=Client}}.
 
@@ -121,7 +119,6 @@ handle_call_execute("erl/" ++ String, Cmd, From, State) ->
     ModuleName = list_to_atom(File),
     Func = list_to_atom(FuncStr),
     apply(ModuleName, Func, [State#state.client, Cmd, From, Args]),
-
     {noreply, State};
 handle_call_execute(_Called, Cmd, From, State) ->
     yate:ret(From, Cmd, false),
@@ -132,7 +129,6 @@ handle_call_route("99991009", Cmd, From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
     {ok, _Pid} = yate_demo_call:start_link(State#state.client, Id, Cmd, []),
     yate:ret(From, Cmd, true, "dumb/"),
-%%    yate:ret(From, Cmd, true, "tone/dial"),
     {noreply, State};
 handle_call_route(Called, Cmd, From, State) ->
     yate:ret(From, Cmd, false),
