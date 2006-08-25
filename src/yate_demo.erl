@@ -98,6 +98,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 terminate(_Reason, State) ->
     Handle = State#state.handle,
     yate:uninstall(Handle, call.route),
+    yate:uninstall(Handle, call.execute),
     terminated.
 
 
