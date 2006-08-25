@@ -87,6 +87,7 @@ terminate(_Reason, _StateName, StateData) ->
     yate:unwatch(Handle, call.execute), 
     yate:unwatch(Handle, chan.hangup),
     yate:uninstall(Handle, chan.dtmf),
+    yate:uninstall(Handle, chan.notify),
     yate:close(Handle),
     terminate.
 

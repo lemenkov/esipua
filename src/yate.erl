@@ -96,9 +96,6 @@ uninstall(Handle, Name) ->
 %% @end
 %%--------------------------------------------------------------------
 ret(Pid, Cmd, Success) ->
-    Header = Cmd#command.header,
-    error_logger:info_msg("Ret ~p ~p ~p -> ~p",
-			  [Header#message.name, Success, self(), Pid]),
     Pid ! {ret, Cmd#command{success=Success}}.
 
 %%--------------------------------------------------------------------
@@ -111,8 +108,6 @@ ret(Pid, Cmd, Success) ->
 %%--------------------------------------------------------------------
 ret(Pid, Cmd, Success, Retval) ->
     Header = (Cmd#command.header)#message{retvalue=Retval},
-    error_logger:info_msg("Ret ~p ~p ~p -> ~p",
-			  [Header#message.name, Success, self(), Pid]),
     Pid ! {ret, Cmd#command{success=Success,header=Header}}.
 
 %%--------------------------------------------------------------------
