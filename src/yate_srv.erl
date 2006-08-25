@@ -6,6 +6,7 @@
 -module(yate_srv).
 
 -include("yate.hrl").
+-include("yate_srv.hrl").
 
 -behaviour(gen_server).
 
@@ -29,8 +30,6 @@
 		 outgoing=dict:new()}).
 
 -record(pidentry, {type, name}).
-
--record(install_entry, {pid, func}).
 
 -define(SERVER, ?MODULE).
 
@@ -115,9 +114,6 @@ handle_call(Request, _From, State) ->
 
 handle_cast(stop, State) ->
     {stop, normal, State};
-handle_cast({client, {ret, Cmd}, _Pid}, State) ->
-    Success = Cmd#command.success,
-    handle_ret(Success, Cmd, State);
 %% handle_cast({cast, {ans, RetValue, RetCmd}, From}, State) ->
 %%     error_logger:info_msg("Ans in ~p: ~p~n", [?MODULE, RetValue]),
 %%     gen_server:reply(From, {ok, RetValue, RetCmd}),
@@ -156,7 +152,10 @@ handle_command(Type, _Dir, _Cmd, _From, State) ->
 handle_request(Name, Cmd, _From, State) ->
     case dict:find(Name, State#sstate.installed) of
 	{ok, EntryList} ->
-	    send_pending(Cmd, EntryList, State);
+%%	    send_pending(Cmd, EntryList, State);
+	    Conn = State#sstate.conn,
+	    yate_pending:start_link(Conn, Cmd, EntryList),
+	    {noreply, State};
 	error ->
 %%	    yate_conn:ret(State#sstate.conn, Cmd, false),
 	    error_logger:error_msg("Unhandled request in ~p: ~p~n", [?MODULE, Name]),
@@ -173,30 +172,6 @@ handle_answer(Name, Cmd, _From, State) ->
     end,
     {noreply, State}.
 
-handle_ret(true, Cmd, State) ->
-    Id = Cmd#command.id,
-    Pending = dict:erase(Id, State#sstate.pending),
-    yate_conn:ret(State#sstate.conn, Cmd, true),
-    {noreply, State#sstate{pending=Pending}};
-
-handle_ret(false, Cmd, State) ->
-    Id = Cmd#command.id,
-    Pending = State#sstate.pending,
-    EntryList = dict:fetch(Id, Pending),
-    send_pending(Cmd, EntryList, State).
-
-
-send_pending(Cmd, EntryList, State) ->
-    case send_once(req, Cmd, EntryList) of
-	{ok, NewEntryList} ->
-	    Id = Cmd#command.id,
-	    NewPending = dict:store(Id, NewEntryList, State#sstate.pending),
-	    {noreply, State#sstate{pending=NewPending}};
-	error ->
-	    yate_conn:ret(State#sstate.conn, Cmd, false),
-	    {noreply, State}
-    end.
-
 
 %% @doc Send Cmd to all entries at once
 send_all(Type, Cmd, [Entry|R]) ->
@@ -209,19 +184,6 @@ send_all(Type, Cmd, [Entry|R]) ->
     send_all(Type, Cmd, R);
 send_all(_Type, _Cmd, []) ->
     ok.
-
-
-%% @doc Send Cmd to first entry
-send_once(Type, Cmd, [Entry|R]) ->
-    case (Entry#install_entry.func)(Cmd) of
-	true ->
-	    Entry#install_entry.pid ! {yate, Type, Cmd, self()},
-	    {ok, R};
-	false ->
-	    send_once(Type, Cmd, R)
-    end;
-send_once(_Type, _Cmd, []) ->
-    error.
 
 
 install(Type, Name, Pid, Fun, State, Installed) ->

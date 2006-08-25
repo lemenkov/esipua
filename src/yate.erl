@@ -95,8 +95,11 @@ uninstall(Handle, Name) ->
 %% @doc answer message
 %% @end
 %%--------------------------------------------------------------------
-ret(Handle, Cmd, Success) ->
-    cast(Handle, {ret, Cmd#command{success=Success}}).
+ret(Pid, Cmd, Success) ->
+    Header = Cmd#command.header,
+    error_logger:info_msg("Ret ~p ~p ~p -> ~p",
+			  [Header#message.name, Success, self(), Pid]),
+    Pid ! {ret, Cmd#command{success=Success}}.
 
 %%--------------------------------------------------------------------
 %% @spec ret(Handle, Cmd, Processed, Retval) -> ok
@@ -106,9 +109,11 @@ ret(Handle, Cmd, Success) ->
 %% @doc answer message
 %% @end
 %%--------------------------------------------------------------------
-ret(Handle, Cmd, Success, Retval) ->
+ret(Pid, Cmd, Success, Retval) ->
     Header = (Cmd#command.header)#message{retvalue=Retval},
-    cast(Handle, {ret, Cmd#command{success=Success,header=Header}}).
+    error_logger:info_msg("Ret ~p ~p ~p -> ~p",
+			  [Header#message.name, Success, self(), Pid]),
+    Pid ! {ret, Cmd#command{success=Success,header=Header}}.
 
 %%--------------------------------------------------------------------
 %% @spec queue_msg(Handle, Name, Keys) -> ok

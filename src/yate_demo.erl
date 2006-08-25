@@ -115,7 +115,7 @@ handle_message(call.route, Cmd, From, State) ->
     handle_call_route(dict:fetch(called, Cmd#command.keys), Cmd, From, State).
 
 
-handle_call_execute("erl/" ++ String, Cmd, _From, State) ->
+handle_call_execute("erl/" ++ String, Cmd, From, State) ->
     [File, FuncStr | Args] = string:tokens(String, "/"),
 
     ModuleName = list_to_atom(File),
@@ -126,23 +126,26 @@ handle_call_execute("erl/" ++ String, Cmd, _From, State) ->
 %%     ChildSpec = {Id, {ModuleName, Func, [State#sstate.client, Cmd, Args]},
 %% 		 temporary, 10, worker, [ModuleName]},
 %%     yate_demo_sup:start_child(ChildSpec),
-   apply(ModuleName, Func, [State#sstate.client, Cmd, Args]),
+    error_logger:info_msg("Before"),
+   apply(ModuleName, Func, [State#sstate.client, Cmd, From, Args]),
+    error_logger:info_msg("After"),
+
     {noreply, State};
-handle_call_execute(_Called, Cmd, _From, State) ->
-    Handle = State#sstate.handle,
-    yate:ret(Handle, Cmd, false),
+handle_call_execute(_Called, Cmd, From, State) ->
+%%     Handle = State#sstate.handle,
+    yate:ret(From, Cmd, false),
     {noreply, State}.
 
 
-handle_call_route("99991009", Cmd, _From, State) ->
+handle_call_route("99991009", Cmd, From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
     {ok, _Pid} = yate_demo_call:start_link(State#sstate.client, Id, Cmd, []),
-    Handle = State#sstate.handle,
-    yate:ret(Handle, Cmd, true, "dumb/"),
+%%     Handle = State#sstate.handle,
+    yate:ret(From, Cmd, true, "dumb/"),
 %%    yate:ret(From, Cmd, true, "tone/dial"),
     {noreply, State};
-handle_call_route(Called, Cmd, _From, State) ->
-    Handle = State#sstate.handle,
-    yate:ret(Handle, Cmd, false),
+handle_call_route(Called, Cmd, From, State) ->
+%%     Handle = State#sstate.handle,
+    yate:ret(From, Cmd, false),
     error_logger:error_msg("Unhandled call.route to: ~p~n", [Called]),
     {noreply, State}.

@@ -8,7 +8,7 @@
 -behaviour(gen_fsm).
 
 %% api
--export([start_link/4, start/3]).
+-export([start_link/5, start/4]).
 
 %% gen_fsm
 -export([code_change/4, handle_event/3, handle_info/3, handle_sync_event/4,
@@ -20,9 +20,9 @@
 
 -define(TIMEOUT_WAIT_EXEC, 10000). %% 10s
 
-start(Client, Cmd, Args) ->
+start(Client, Cmd, From, Args) ->
     Id = dict:fetch(id, Cmd#command.keys),
-    start_link(Client, Id, Cmd, Args).
+    start_link(Client, Id, Cmd, From, Args).
 
 %%--------------------------------------------------------------------
 %% @spec start_link() -> Result
@@ -30,15 +30,15 @@ start(Client, Cmd, Args) ->
 %% @doc Start demo server
 %% @end
 %%--------------------------------------------------------------------
-start_link(Client, Id, Cmd, Args) ->
+start_link(Client, Id, Cmd, From, Args) ->
     error_logger:info_msg("yate_demo_call start_link~n"),
-    gen_fsm:start_link(yate_demo_call, [Client, Id, Cmd, Args], []).
+    gen_fsm:start_link(yate_demo_call, [Client, Id, Cmd, From, Args], []).
 
 %% start(Client, Id, Cmd, Args) ->
 %%     gen_fsm:start(yate_demo_call, [Client, Id, Cmd, Args], []).
 
 %% gen_fsm
-init([Client, Id, ExecCmd, _Args]) ->
+init([Client, Id, ExecCmd, From, _Args]) ->
     error_logger:info_msg("Init call ~p~n", [Id]),
     {ok, Handle} = yate:open(Client),
     ok = yate:watch(Handle, call.execute, 
@@ -48,9 +48,10 @@ init([Client, Id, ExecCmd, _Args]) ->
 		    end),
 %%     ok = yate:install(Handle, chan.notify),
 
+%%     Handle = State#sstate.handle,
     NewKeys = dict:store(callto, "dumb/", ExecCmd#command.keys),
     NewCmd = ExecCmd#command{keys=NewKeys},
-    yate:ret(Handle, NewCmd, false),
+    yate:ret(From, NewCmd, false),
 
     {ok, route, #sstate{handle=Handle, id=Id}, ?TIMEOUT_WAIT_EXEC}.
 
@@ -119,14 +120,14 @@ handle_message(call.execute, ans, Cmd, _From, route, StateData) ->
     ok = answer(Id, Cmd, StateData),
     ok = record_wave(Cmd, StateData),
     {next_state, execute, StateData};
-handle_message(chan.dtmf, req, Cmd, _From, execute, StateData) ->
+handle_message(chan.dtmf, req, Cmd, From, execute, StateData) ->
     Text = dict:fetch(text, Cmd#command.keys),
-    handle_dtmf(Text, Cmd, execute, StateData);
-handle_message(chan.notify, req, Cmd, _From, execute, StateData) ->
+    handle_dtmf(Text, Cmd, From, execute, StateData);
+handle_message(chan.notify, req, Cmd, From, execute, StateData) ->
     Id = dict:fetch(targetid, Cmd#command.keys),
-    Handle = StateData#sstate.handle,
+%%     Handle = StateData#sstate.handle,
     error_logger:info_msg("Notify ~p~n", [Id]),
-    yate:ret(Handle, Cmd, true),
+    yate:ret(From, Cmd, true),
     {next_state, execute, StateData};
 handle_message(chan.hangup, ans, Cmd, _From, _State, StateData) ->
     Id = dict:fetch(id, Cmd#command.keys),
@@ -134,10 +135,9 @@ handle_message(chan.hangup, ans, Cmd, _From, _State, StateData) ->
     {stop, normal, StateData}.
 %%    {stop, hangup, StateData}.
 
-handle_dtmf(Text, Cmd, execute, StateData) ->
-    Handle = StateData#sstate.handle,
+handle_dtmf(Text, Cmd, From, execute, StateData) ->
     error_logger:info_msg("Call dtmf ~p~n", [Text]),
-    yate:ret(Handle, Cmd, true),
+    yate:ret(From, Cmd, true),
     {next_state, execute, StateData}.
 
 answer(Id, Cmd, StateData) ->
