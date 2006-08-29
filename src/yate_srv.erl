@@ -73,7 +73,7 @@ init([Host, Port]) ->
     {ok, Conn} = yate_conn_srv:start_link(Host, Port, self()),
     error_logger:info_msg("Connected ~p~n", [?MODULE]),
 %%    link(Conn),
-    process_flag(trap_exit, true),
+%%    process_flag(trap_exit, true),
     {ok, #sstate{conn=Conn}}.
 
 code_change(_OldVsn, State, _Extra) ->
