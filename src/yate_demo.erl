@@ -67,9 +67,25 @@ init([]) ->
     {ok, Handle} = yate:open(Client),
     ok = yate:install(Handle, call.route, 
 		      fun(Cmd) ->
-			      dict:fetch(called, Cmd#command.keys) == "99991009"
+			      true
 		      end),
     ok = yate:install(Handle, call.execute,
+		      fun(_Cmd) ->
+			      true
+		      end),
+    ok = yate:watch(Handle, chan.hangup,
+		      fun(_Cmd) ->
+			      true
+		      end),
+    ok = yate:watch(Handle, chan.drop,
+		      fun(_Cmd) ->
+			      true
+		      end),
+    ok = yate:watch(Handle, chan.disconnected,
+		      fun(_Cmd) ->
+			      true
+		      end),
+    ok = yate:watch(Handle, chan.startup,
 		      fun(_Cmd) ->
 			      true
 		      end),
@@ -103,7 +119,10 @@ terminate(_Reason, State) ->
 
 
 handle_command(message, req, Cmd, From, State) ->
-    handle_message((Cmd#command.header)#message.name, Cmd, From, State).
+    handle_message((Cmd#command.header)#message.name, Cmd, From, State);
+handle_command(message, ans, Cmd, From, State) ->
+    error_logger:info_msg("Ignore answer/watch.~n", []),
+    {noreply, State}.
 
 
 handle_message(call.execute, Cmd, From, State) ->
@@ -135,6 +154,10 @@ handle_call_execute(_Called, Cmd, From, State) ->
 
 handle_call_route("99991009", Cmd, From, State) ->
     yate:ret(From, Cmd, true, "erl/yate_demo_call/start"),
+    {noreply, State};
+handle_call_route("mikael", Cmd, From, State) ->
+    error_logger:info_msg("Route mikael~n"),
+    yate:ret(From, Cmd, true, "sip/sip:mikael@localhost:5080"),
     {noreply, State};
 handle_call_route(Called, Cmd, From, State) ->
     yate:ret(From, Cmd, false),
