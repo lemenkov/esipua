@@ -128,6 +128,9 @@ handle_data({eol, "Yate engine is initialized and starting up"}, State) ->
     {ok, State#sstate{state=running,waiting=[]}};
 handle_data({eol, _Text}, State) ->
     %% skip text
+    {ok, State};
+handle_data({noeol, _Text}, State) ->
+    %% skip text
     {ok, State}.
 
 
