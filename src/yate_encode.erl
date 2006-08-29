@@ -84,9 +84,9 @@ encode_dict_item(Key, Value, {Type, Res}) ->
     {Type, Res ++ ":" ++ ParamStr}.
 
 encode_param(header, Param) ->
-    encode_value(Param);
+    encode_string(encode_value(Param));
 encode_param(key, {Name, Value}) ->
-    atom_to_list(Name) ++ "=" ++ encode_value(Value).
+    atom_to_list(Name) ++ "=" ++ encode_string(encode_value(Value)).
 
 encode_value(Value) ->
     if is_integer(Value) ->
@@ -98,3 +98,15 @@ encode_value(Value) ->
        is_list(Value) ->
 	    Value
     end.
+
+encode_string([Char|R]) ->
+    Enc =
+	if
+	    Char < 32; Char == $:; Char == $=; Char == $\% ->
+		[$\%, Char + 64];
+	    true ->
+		Char
+    end,
+    [Enc | encode_string(R)];
+encode_string([]) ->
+    [].
