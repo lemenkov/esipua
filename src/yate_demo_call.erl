@@ -14,7 +14,7 @@
 -export([code_change/4, handle_event/3, handle_info/3, handle_sync_event/4,
 	 init/1, terminate/3, route/2]).
 
--record(sstate, {handle, id}).
+-record(sstate, {handle, id, peer_id}).
 
 -include("yate.hrl").
 
@@ -119,8 +119,8 @@ handle_message(call.execute, ans, Cmd, _From, route, StateData) ->
 		    end),
 
     ok = answer(Id, Cmd, StateData),
-    ok = record_wave(Cmd, StateData),
-    {next_state, execute, StateData};
+    ok = play_wave(Cmd, StateData),
+    {next_state, execute, StateData#sstate{peer_id=Peerid}};
 handle_message(chan.dtmf, req, Cmd, From, execute, StateData) ->
     Text = dict:fetch(text, Cmd#command.keys),
     handle_dtmf(Text, Cmd, From, execute, StateData);
@@ -129,7 +129,8 @@ handle_message(chan.notify, req, Cmd, From, execute, StateData) ->
 %%     Handle = StateData#sstate.handle,
     error_logger:info_msg("Notify ~p~n", [Id]),
     yate:ret(From, Cmd, true),
-    {next_state, execute, StateData};
+    ok = drop(StateData),
+    {stop, normal, StateData};
 handle_message(chan.hangup, ans, Cmd, _From, _State, StateData) ->
     Id = dict:fetch(id, Cmd#command.keys),
     error_logger:info_msg("Call hangup ~p~n", [Id]),
@@ -141,16 +142,29 @@ handle_dtmf(Text, Cmd, From, execute, StateData) ->
     yate:ret(From, Cmd, true),
     {next_state, execute, StateData}.
 
-answer(Id, Cmd, StateData) ->
-    Handle = StateData#sstate.handle,
-    {ok, _RetValue, _RetCmd} = yate:send_msg(Handle, call.answered, [{id, dict:fetch(targetid, Cmd#command.keys)}, {targetid, Id}, {module, "erlang"}]),
-    ok.
-
 record_wave(Cmd, StateData) ->
     Handle = StateData#sstate.handle,
     TargetId = dict:fetch(targetid, Cmd#command.keys),
     Notify = StateData#sstate.id,
-    record_wave(Handle, TargetId, Notify, "/tmp/record.mulaw", 8000).
+%%    play_wave(Handle, TargetId, Notify, "/var/local/tmp/cvs/asterisk.net/sounds/demo-thanks.gsm").
+    play_wave(Handle, TargetId, Notify, "/var/local/tmp/cvs/asterisk.net/sounds/demo-congrats.gsm").
+%%    play_wave(Handle, TargetId, Notify, "/tmp/record.mulaw").
+%%    record_wave(Handle, TargetId, Notify, "/tmp/record.mulaw", 8000).
+
+play_tone(Cmd, StateData) ->
+    TargetId = dict:fetch(targetid, Cmd#command.keys),
+    {ok, _RetValue, _RetCmd} =
+	yate:send_msg(StateData#sstate.handle, chan.masquerade,
+		      [{message, "chan.attach"},
+		       {id, TargetId},
+		       {notify, StateData#sstate.id},
+		       {source, "tone/dial"}]),
+    ok.
+
+play_wave(Cmd, StateData) ->
+    TargetId = dict:fetch(targetid, Cmd#command.keys),
+    play_wave(StateData#sstate.handle, TargetId, StateData#sstate.id,
+	      "/var/local/tmp/cvs/asterisk.net/sounds/digits/0.gsm").
 
 record_wave(Handle, TargetId, Notify, WaveFile, MaxLen) ->
     {ok, _RetValue, _RetCmd} =
@@ -170,6 +184,43 @@ play_wave(Handle, TargetId, Notify, WaveFile) ->
 		       {id, TargetId},
 		       {notify, Notify},
 		       {source, ["wave/play/", WaveFile]}
+		      ]),
+    ok.
+
+%% answer(Id, Cmd, StateData) ->
+%%     Handle = StateData#sstate.handle,
+%%     {ok, _RetValue, _RetCmd} =
+%% 	yate:send_msg(Handle,
+%% 		      call.answered,
+%% 		      [
+%% %%		       {id, dict:fetch(targetid, Cmd#command.keys)},
+%%  		       {targetid, Id},
+%% 		       {module, "erlang"}
+%% 		      ]),
+%%     ok.
+
+answer(Id, Cmd, StateData) ->
+    Handle = StateData#sstate.handle,
+    {ok, _RetValue, _RetCmd} =
+	yate:send_msg(Handle, chan.masquerade,
+		      [
+		       {message, call.answered},
+		       {id, dict:fetch(targetid, Cmd#command.keys)},
+ 		       {targetid, Id},
+		       {module, "erlang"}
+		      ]),
+    ok.
+
+drop(StateData) ->
+    Handle = StateData#sstate.handle,
+    {ok, _RetValue, _RetCmd} =
+	yate:send_msg(Handle, chan.masquerade,
+		      [
+		       {message, "call.drop"},
+		       {id, StateData#sstate.peer_id},
+		       {reason, "hangup"},
+		       {module, "erlang"}
+%% 		       {answered, "true"}
 		      ]),
     ok.
 
