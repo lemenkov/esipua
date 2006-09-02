@@ -23,7 +23,7 @@
 -record(sstate, {pid, port, state=startup, waiting=[]}).
 
 -define(SERVER, ?MODULE).
--define(PROG, "./wrapper /usr/bin/yate").
+-define(PROG, "./wrapper /usr/bin/yate"). %%  -vvvvvvvvv
 -define(TIMEOUT_5S, 5000).
 
 
@@ -126,11 +126,13 @@ handle_data({eol, "Yate engine is initialized and starting up"}, State) ->
     Fun = fun(From) -> gen_server:reply(From, ok) end,
     lists:map(Fun, State#sstate.waiting),
     {ok, State#sstate{state=running,waiting=[]}};
-handle_data({eol, _Text}, State) ->
+handle_data({eol, Text}, State) ->
     %% skip text
+    io:format("~s~n", [Text]),
     {ok, State};
-handle_data({noeol, _Text}, State) ->
+handle_data({noeol, Text}, State) ->
     %% skip text
+    io:format("~s", [Text]),
     {ok, State}.
 
 
