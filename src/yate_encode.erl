@@ -102,7 +102,7 @@ encode_value(Value) ->
 encode_string([Char|R]) ->
     Enc =
 	if
-	    Char < 32; Char == $:; Char == $=; Char == $\% ->
+	    Char < 32; Char == $:; Char == $\% ->
 		[$\%, Char + 64];
 	    true ->
 		Char
