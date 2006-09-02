@@ -157,7 +157,7 @@ handle_call_route("99991009", Cmd, From, State) ->
     {noreply, State};
 handle_call_route("mikael", Cmd, From, State) ->
     error_logger:info_msg("Route mikael~n"),
-    yate:ret(From, Cmd, true, "sip/sip:mikael@localhost:5080"),
+    yate:ret(From, Cmd, true, "sip/sip:1002@mulder"),
     {noreply, State};
 handle_call_route(Called, Cmd, From, State) ->
     yate:ret(From, Cmd, false),
