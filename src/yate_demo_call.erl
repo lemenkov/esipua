@@ -49,7 +49,12 @@ init([Client, Id, ExecCmd, From, _Args]) ->
 %%     ok = yate:install(Handle, chan.notify),
 
 %%     Handle = State#sstate.handle,
-    NewKeys = dict:store(callto, "dumb/", ExecCmd#command.keys),
+    NewKeys =
+	yate_util:dict_store_list([
+				   {callto, "dumb/"},
+				   {autoring, true}
+				  ],
+				  ExecCmd#command.keys),
     NewCmd = ExecCmd#command{keys=NewKeys},
     yate:ret(From, NewCmd, false),
 
