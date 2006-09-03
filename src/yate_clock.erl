@@ -74,6 +74,8 @@ handle_call(_Request, _From, _State) ->
 
 handle_info({yate, Dir, Cmd, From}, State) ->
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
+handle_info(timeout, State) ->
+    handle_timeout(State#sstate.waves, State);
 handle_info(Info, State) ->
     error_logger:error_msg("Unsupported info: ~p~n", [Info]),
     {noreply, State}.
@@ -134,6 +136,16 @@ handle_notify([], State) ->
     ok = drop(State),
     {stop, normal, State};
 handle_notify([Wave_file | R], State) ->
+    {noreply, State, 10}.
+%% handle_notify([Wave_file | R], State) ->
+%%     [Wave_file | R] = State#sstate.waves,
+%%     ok = play_wave(State#sstate.peer_id, State, Wave_file),
+%%     {noreply, State#sstate{waves=R}}.
+
+handle_timeout([], State) ->
+    ok = drop(State),
+    {stop, normal};
+handle_timeout([Wave_file | R], State) ->
     [Wave_file | R] = State#sstate.waves,
     ok = play_wave(State#sstate.peer_id, State, Wave_file),
     {noreply, State#sstate{waves=R}}.
