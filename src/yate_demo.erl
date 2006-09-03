@@ -89,6 +89,10 @@ init([]) ->
 		      fun(_Cmd) ->
 			      true
 		      end),
+    ok = yate:watch(Handle, call.ringing,
+		      fun(_Cmd) ->
+			      true
+		      end),
     {ok, #state{handle=Handle, client=Client}}.
 
 
@@ -154,6 +158,9 @@ handle_call_execute(_Called, Cmd, From, State) ->
 
 handle_call_route("99991009", Cmd, From, State) ->
     yate:ret(From, Cmd, true, "erl/yate_demo_call/start"),
+    {noreply, State};
+handle_call_route("99981003", Cmd, From, State) ->
+    yate:ret(From, Cmd, true, "erl/yate_clock/start"),
     {noreply, State};
 handle_call_route("mikael", Cmd, From, State) ->
     error_logger:info_msg("Route mikael~n"),
