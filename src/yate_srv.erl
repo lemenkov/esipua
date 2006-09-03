@@ -103,8 +103,12 @@ handle_call({client, {unwatch, Name}, Pid}, _From, State) ->
     {ok, NewInstalled, NewPids} = uninstall(watch, Name, Pid, State, Installed),
     {reply, ok, State#sstate{watched=NewInstalled, pids=NewPids}};
 
+handle_call({client, {msg, Name, Keys, Tag}, Pid}, _From, State) ->
+    ok = yate_conn:queue_msg(State#sstate.conn, Name, Keys, {queue, Pid, Tag}),
+    {reply, ok, State};
+
 handle_call({client, {msg, Name, Keys}, _Pid}, From, State) ->
-    ok = yate_conn:queue_msg(State#sstate.conn, Name, Keys, From),
+    ok = yate_conn:queue_msg(State#sstate.conn, Name, Keys, {send, From}),
     {noreply, State};
 
 handle_call(Request, _From, State) ->
@@ -125,7 +129,10 @@ handle_cast(Request, State) ->
 
 handle_info({yate, Dir, Cmd, From}, State) ->
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
-handle_info({cast, {ans, RetValue, RetCmd}, From}, State) ->
+handle_info({cast, {ans, RetValue, RetCmd}, {queue, Pid, Tag}}, State) ->
+    Pid ! {cast, {ans, RetValue, RetCmd}, Tag},
+    {noreply, State};
+handle_info({cast, {ans, RetValue, RetCmd}, {send, From}}, State) ->
     gen_server:reply(From, {ok, RetValue, RetCmd}),
     {noreply, State};
 handle_info({'EXIT', Pid, Reason}, State) ->
