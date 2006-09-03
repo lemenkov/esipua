@@ -8,15 +8,12 @@
 -behaviour(supervisor).
 
 %% api
--export([start_link/0, start_child/1]).
+-export([start_link/0]).
 
 %% supervisor
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
-
--define(HOST, localhost).
--define(PORT, 15062).
 
 
 %%--------------------------------------------------------------------
@@ -28,15 +25,6 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-
-%%--------------------------------------------------------------------
-%% @spec start_child(ChildSpec) -> Result
-%%           Result = {ok, Pid} | {error, Reason}
-%% @doc Start child
-%% @end
-%%--------------------------------------------------------------------
-start_child(ChildSpec) ->
-    supervisor:start_child(?SERVER, ChildSpec).
 
 init(_Args) ->
     ChildSpec = {yate_demo, {yate_demo, start_link, []},
