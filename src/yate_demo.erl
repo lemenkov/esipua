@@ -77,19 +77,11 @@ init([]) ->
 		      fun(_Cmd) ->
 			      true
 		      end),
-    ok = yate:watch(Handle, chan.drop,
-		      fun(_Cmd) ->
-			      true
-		      end),
     ok = yate:watch(Handle, chan.disconnected,
 		      fun(_Cmd) ->
 			      true
 		      end),
     ok = yate:watch(Handle, chan.startup,
-		      fun(_Cmd) ->
-			      true
-		      end),
-    ok = yate:watch(Handle, call.ringing,
 		      fun(_Cmd) ->
 			      true
 		      end),
@@ -159,7 +151,7 @@ handle_call_execute(_Called, Cmd, From, State) ->
 handle_call_route("99991009", Cmd, From, State) ->
     yate:ret(From, Cmd, true, "erl/yate_demo_call/start"),
     {noreply, State};
-handle_call_route("99981003", Cmd, From, State) ->
+handle_call_route("clock", Cmd, From, State) ->
     yate:ret(From, Cmd, true, "erl/yate_clock/start"),
     {noreply, State};
 handle_call_route("mikael", Cmd, From, State) ->
