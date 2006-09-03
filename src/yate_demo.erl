@@ -66,7 +66,7 @@ init([]) ->
     {ok, Client} = yate:connect(?HOST, ?PORT),
     {ok, Handle} = yate:open(Client),
     ok = yate:install(Handle, call.route, 
-		      fun(Cmd) ->
+		      fun(_Cmd) ->
 			      true
 		      end),
     ok = yate:install(Handle, call.execute,
@@ -116,7 +116,7 @@ terminate(_Reason, State) ->
 
 handle_command(message, req, Cmd, From, State) ->
     handle_message((Cmd#command.header)#message.name, Cmd, From, State);
-handle_command(message, ans, Cmd, From, State) ->
+handle_command(message, ans, _Cmd, _From, State) ->
     error_logger:info_msg("Ignore answer/watch.~n", []),
     {noreply, State}.
 
