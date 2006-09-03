@@ -1,5 +1,5 @@
 %%%
-%%% @doc       Yate demo applictation module
+%%% @doc       Yate demo application module
 %%% @author    Mikael Magnusson <mikma@users.sourceforge.net>
 %%% @copyright 2006 Mikael Magnusson
 %%%
