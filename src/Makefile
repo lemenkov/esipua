@@ -3,7 +3,7 @@ yate_conn.erl yate_encode.erl yate_test.erl		\
 yate_conn_srv.erl yate.erl yate_util.erl yate_decode.erl		\
 yate_app.erl yate_demo_sup.erl yate_demo_app.erl	\
 yate_port_srv.erl yate_port_sup.erl \
-sipclient.erl ysip_srv.erl
+sipclient.erl ysip_srv.erl sdp.erl
 
 beam_FILES = $(erl_FILES:.erl=.beam)
 

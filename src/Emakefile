@@ -2,4 +2,4 @@
 "yate_conn", "yate_encode", "yate_test",
 "yate_conn_srv", "yate", "yate_util", "yate_decode",
 "yate_app", "yate_demo_sup", "yate_demo_app",
-"yate_port_srv", "yate_port_sup", "yate_pending", "yate_clock", "sipclient", "ysip_srv"], [load, {i, "../include"}, {i, "/usr/lib/yxa/include"}]}.
+"yate_port_srv", "yate_port_sup", "yate_pending", "yate_clock", "sipclient", "ysip_srv", "sdp"], [load, {i, "../include"}, {i, "/usr/lib/yxa/include"}]}.
