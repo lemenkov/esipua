@@ -102,6 +102,11 @@ handle_cast(stop, State) ->
 
 handle_info({yate, Dir, Cmd, From}, State) ->
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
+handle_info({cast, {ans, RetValue, RetCmd}, {call, From}}, State) ->
+    Id = dict:fetch(id, RetCmd#command.keys),
+    error_logger:info_msg("Result ~p ~p~n", [RetValue, Id]),
+    gen_server:reply(From, RetValue),
+    {noreply, State};
 handle_info({'EXIT', Pid, Reason}, State) ->
     error_logger:error_msg("EXIT: ~p ~p~n", [Pid, Reason]),
     {noreply, State}.
