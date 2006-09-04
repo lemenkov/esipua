@@ -3,5 +3,6 @@
  [{kernel,"2.11"},
   {stdlib,"1.14"},
   {sasl,"2.1.2"},
+  {sipclient, "0.0"},
   {yate, "0.0"},
   {yate_demo, "0.0"}]}.
