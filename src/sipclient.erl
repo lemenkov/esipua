@@ -304,7 +304,7 @@ play_rtp(State, Id) ->
  		       {consumer, "rtp/fixme"},
 		       {remoteip, State#state.address},
 		       {remoteport, State#state.port},
-		       {format, "gsm"}
+		       {format, "alaw"}
 		      ]),
 
     case dict:find(localport, RetCmd#command.keys) of
@@ -329,10 +329,8 @@ play_rtp(State, Id) ->
     Sdp = #sdp{origin=Origin, session_name="Yxa", media=[Media]},
     Body = list_to_binary(lists:flatten(sdp:print(Sdp))),
     ExtraHeaders = [
-		    {"Content-Type", ["application/sdp"]}
 		   ],
     Request = State#state.invite,
-%%     ok = send_response(Request, 183, "Session Progress", ExtraHeaders, Body),
     ok = send_response(Request, 183, "Session Progress", ExtraHeaders, Body),
 
     {ok, State}.
