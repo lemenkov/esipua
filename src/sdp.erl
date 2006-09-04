@@ -3,15 +3,12 @@
 %%
 
 -module(sdp).
+
+-include("sdp.hrl").
+
 -export([parse/1,
 	 print/1
 	]).
-
--record(sdp,{origin, session_name, connection, attributes=[], media=[]}).
--record(sdp_origin, {username, session_id, version, network_type, address_type,
-	    address}).
--record(sdp_media,{media, port, transport, fmts, connection, attributes=[]}).
--record(sdp_connection,{network_type, address_type, address}).
 
 parse(String) ->
     Packetfixed = siputil:linefix(String),

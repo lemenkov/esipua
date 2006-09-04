@@ -18,7 +18,8 @@
 	 handle_info/2,
 	 terminate/2]).
 
--record(state, {dialog, invite, bye_pid, bye_branch, handle, id, owner}).
+-record(state, {dialog, invite, bye_pid, bye_branch, handle, id, owner, peerid,
+	       address, port}).
 
 -define(SERVER, ?MODULE).
 
@@ -29,6 +30,7 @@
 -include("siprecords.hrl").
 -include("sipsocket.hrl").
 -include("yate.hrl").
+-include("sdp.hrl").
 
 -define(DEFAULT_TIMEOUT, 50).
 -define(HOST, "localhost").
@@ -199,7 +201,7 @@ start_link(Client, Request, LogStr) ->
 %% Return when the transaction has completed or terminated.
 %%
 process(Pid) ->
-    gen_server:call(Pid, process).
+    gen_server:call(Pid, process, 30000).
     
 
 stop() ->
@@ -211,10 +213,11 @@ stop() ->
 init([Client, Request, LogStr]) ->
     {ok, Handle} = yate:open(Client),
     logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
-    State = #state{invite=Request, handle=Handle},
-    ok = send_response(Request, 101, "Proceeding"),
-    {ok, _TRef} = timer:send_after(2000, timeout),
-    {ok, State}.
+    {ok, Address, Port} = parse_sdp(Request),
+    State = #state{invite=Request, handle=Handle, address=Address, port=Port},
+    {ok, _TRef} = timer:send_after(20000, timeout),
+    {ok, State1} = execute(State),
+    {ok, State1}.
 %%     {ok, State1} = send_102(State),
 %%     {ok, State1}.
 %%     {ok, State}.
@@ -224,18 +227,42 @@ init([Client, Request, LogStr]) ->
 %%     logger:log(normal, "sipclient: execute ~p~n", [Id]),
 %%     {ok, State#state{id=Id}}.
 
+parse_sdp(Request) ->
+    logger:log(normal, "sipclient: foo~n"),
+    Body = binary_to_list(Request#request.body),
+    {ok, Sdp} = sdp:parse(Body),
+    [Media|_] = Sdp#sdp.media,
+    Conn = case Media#sdp_media.connection of
+	undefined ->
+	    Sdp#sdp.connection;
+	Conn1 ->
+	    Conn1
+    end,
+    Address = Conn#sdp_connection.address,
+    Port = Media#sdp_media.port,
+    logger:log(normal, "sipclient: connection ~s ~p~n", [Address, Port]),
+    {ok, Address, Port}.
+
 execute(State) ->
-    Call_to = "tone/silence",
-    Target = "dumb/",
+%%     Call_to = "tone/congestion",
+%%     Target = "dumb/",
+%%     Call_to = "tone/congestion",
+%%     Target = "tone/busy",
+    Call_to = "tone/congestion",
+    Target = "mikael",
+%%     Call_to = "sip/sip:1002@mulder",
+%%     Target = "tone/congestion",
     Handle = State#state.handle,
     {ok, _RetValue, RetCmd} =
 	yate:send_msg(Handle, call.execute,
 		      [
 		       {callto, Call_to},
-		       {direct, Target}
+%% 		       {direct, Target}
+		       {target, Target}
 		      ]),
     logger:log(normal, "sipclient: RetCmd ~p~n", [dict:to_list(RetCmd#command.keys)]),
     Id = dict:fetch(id, RetCmd#command.keys),
+    State1 = State#state{id=Id},
     ok = yate:watch(Handle, chan.hangup,
 		    fun(Cmd) ->
 			    Id == dict:fetch(id, Cmd#command.keys)
@@ -244,7 +271,82 @@ execute(State) ->
 		    fun(Cmd) ->
 			    Id == dict:fetch(id, Cmd#command.keys)
 		    end),
-    {ok, Id}.
+%%     ok = yate:watch(Handle, chan.startup,
+%% 		    fun(Cmd) ->
+%% 			    Id == dict:fetch(id, Cmd#command.keys)
+%% 		    end),
+    {ok, State1b} = startup(State1, Id),
+    {ok, State2} = play_rtp(State1b, State1b#state.id),
+%%     ok = answer(State2, State2#state.peerid),
+    {ok, State2}.
+%%     {ok, State1}.
+
+startup(State, Id) ->
+    {ok, _RetValue, RetCmd} =
+	yate:send_msg(State#state.handle, chan.masquerade,
+		      [
+		       {message, "chan.startup"},
+		       {id, Id},
+		       {driver, "erlang"}
+		      ]),
+    Peer_id = dict:fetch(peerid, RetCmd#command.keys),
+    {ok, State#state{peerid=Peer_id}}.
+    
+
+play_rtp(State, Id) ->
+    {ok, _RetValue, RetCmd} =
+	yate:send_msg(State#state.handle, chan.masquerade,
+		      [
+		       {message, "chan.attach"},
+		       {id, Id},
+		       {notify, tag},
+		       {source, "rtp/fixme"},
+ 		       {consumer, "rtp/fixme"},
+		       {remoteip, State#state.address},
+		       {remoteport, State#state.port},
+		       {format, "gsm"}
+		      ]),
+
+    case dict:find(localport, RetCmd#command.keys) of
+	{ok, Local_port} ->
+	    logger:log(normal, "sipclient: local rtp port ~p", [Local_port]);
+	_ ->
+	    ok
+    end,
+
+    Localip = dict:fetch(localip, RetCmd#command.keys),
+    Localport = list_to_integer(dict:fetch(localport, RetCmd#command.keys)),
+
+    %% TODO add body
+    Seconds = integer_to_list(yate_util:seconds()),
+    Origin = #sdp_origin{username="-", session_id=Seconds, version=Seconds,
+			 network_type='IN', address_type='IP4',
+			 address=Localip},
+    Connection = #sdp_connection{network_type='IN', address_type='IP4',
+				 address = Localip},
+    Media = #sdp_media{media=audio, port=Localport, transport="RTP/AVP",
+		       fmts=[8], connection=Connection},
+    Sdp = #sdp{origin=Origin, session_name="Yxa", media=[Media]},
+    Body = list_to_binary(lists:flatten(sdp:print(Sdp))),
+    ExtraHeaders = [
+		    {"Content-Type", ["application/sdp"]}
+		   ],
+    Request = State#state.invite,
+%%     ok = send_response(Request, 183, "Session Progress", ExtraHeaders, Body),
+    ok = send_response(Request, 183, "Session Progress", ExtraHeaders, Body),
+
+    {ok, State}.
+
+
+answer(State, Id) ->
+    {ok, _RetValue, RetCmd} =
+	yate:send_msg(State#state.handle, chan.masquerade,
+		      [
+		       {message, "call.answered"},
+		       {id, Id}
+		      ]),
+    ok.
+
 
 send_200ok(State) ->
     Request = State#state.invite,
@@ -267,10 +369,16 @@ send_200ok(State) ->
     {ok, #state{dialog=Dialog}}.
 
 
-send_response(Request, Status, Reason) ->    
-    THandler = transactionlayer:get_handler_for_request(Request),
-    ExtraHeaders = [],
-    transactionlayer:send_response_handler(THandler, Status, Reason, ExtraHeaders).
+send_response(Request, Status, Reason) ->
+    send_response(Request, Status, Reason, []).
+
+send_response(Request, Status, Reason, ExtraHeaders) ->
+    send_response(Request, Status, Reason, ExtraHeaders, <<>>).
+
+send_response(Request, Status, Reason, ExtraHeaders, Body) ->
+%%     THandler = transactionlayer:get_handler_for_request(Request),
+%%     transactionlayer:send_response_handler(THandler, Status, Reason, ExtraHeaders, Body).
+    transactionlayer:send_response_request(Request, Status, Reason, ExtraHeaders, Body).
 
 
 code_change(_OldVsn, State, _Extra) ->
@@ -293,6 +401,7 @@ handle_cast(Request, State) ->
 
 handle_info(timeout, State) ->
     ok = send_response(State#state.invite, 408, "Request Timeout"),
+    ok = drop(State#state.handle, State#state.id),
     gen_server:reply(State#state.owner, ok),
     {noreply, State};
 handle_info({yate, Dir, Cmd, From}, State) ->
@@ -354,9 +463,19 @@ handle_info(Info, State) ->
 
 
 terminate(_Reason, _State) ->
+%%     error_logger:error_msg("Terminated~n", [?MODULE]),
     terminated.
 
 %% send_request() ->
+
+
+drop(Handle, Id) ->
+    {ok, _RetValue, RetCmd} =
+	yate:send_msg(Handle, call.drop,
+		      [
+		       {id, Id}
+		      ]),
+    ok.
 
 send_request(Request) ->
     Branch = siprequest:generate_branch(),
