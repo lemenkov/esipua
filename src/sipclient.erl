@@ -18,8 +18,8 @@
 	 handle_info/2,
 	 terminate/2]).
 
--record(state, {dialog, invite, bye_pid, bye_branch, handle, id, owner, peerid,
-	       address, port}).
+-record(state, {dialog, invite_pid, invite, bye_pid, bye_branch, handle, id, owner, peerid,
+	       address, port, sdp_body, contact}).
 
 -define(SERVER, ?MODULE).
 
@@ -110,7 +110,7 @@ test() ->
     ok.
 
 %%--------------------------------------------------------------------
-%% Function: generate_new_request(Method, State)
+%% Function: generate_new_request(Method, State, Contact)
 %%           Method = string(), SIP method
 %%           State  = state record()
 %% Descrip.: Generate a request template using values from the dialog
@@ -120,7 +120,7 @@ test() ->
 %%           is always created, even though it is not always sent).
 %% Returns : {ok, Request, NewDialog}
 %%--------------------------------------------------------------------
-generate_new_request(Method, Dialog) ->
+generate_new_request(Method, Dialog, Contact) ->
     %% Figure out a bunch of parameters in ways that vary depending on if we have
     {ok, CSeqNum, NewDialog} = sipdialog:get_next_local_cseq(Dialog),
     [C] = contact:parse([NewDialog#dialog.remote_target]),
@@ -134,7 +134,6 @@ generate_new_request(Method, Dialog) ->
 		[{"tag", NewDialog#dialog.remote_tag}]),
     logger:log(normal, "Remote URI: ~p", [To]),
     TargetURI = sipurl:parse(C#contact.urlstr),
-    Contact = "sip:dummy2@localhost",
     From = contact:new(none, NewDialog#dialog.local_uri,
 			      [{"tag", NewDialog#dialog.local_tag}]),
     Header = keylist:from_list([{"From",        [contact:print(From)]},
@@ -194,14 +193,23 @@ start_generate_request(Method, From, To, ExtraHeaders, Body) ->
 
 
 start_link(Client, Request, LogStr) ->
+    logger:log(normal, "sipclient: start_link ~p~n", [self()]),
+    THandler = transactionlayer:get_handler_for_request(Request),
     {ok, Pid} = gen_server:start_link(?MODULE, [Client, Request, LogStr], []),
+    ok = adopt_transaction(THandler, Pid),
     {ok, Pid}.
+
+adopt_transaction(THandler, Pid) ->
+    STPid = transactionlayer:get_pid_from_handler(THandler),
+    ok = gen_server:call(STPid, {change_parent, self(), Pid}),
+    ok.
 
 %%
 %% Return when the transaction has completed or terminated.
 %%
-process(Pid) ->
-    gen_server:call(Pid, process, 30000).
+process(_Pid) ->
+%%     gen_server:call(Pid, process, 30000).
+    ok.
     
 
 stop() ->
@@ -211,10 +219,23 @@ stop() ->
 %% gen_server callbacks
 %%
 init([Client, Request, LogStr]) ->
+    case transactionlayer:adopt_st_and_get_branchbase(Request) of
+	ignore ->
+	    {stop, {error, ignore}};
+	error ->
+	    {stop, error};
+	BranchBase ->
+	    init2(Client, Request, LogStr, BranchBase)
+    end.
+
+init2(Client, Request, LogStr, _BranchBase) ->
     {ok, Handle} = yate:open(Client),
     logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
     {ok, Address, Port} = parse_sdp(Request),
-    State = #state{invite=Request, handle=Handle, address=Address, port=Port},
+    THandler = transactionlayer:get_handler_for_request(Request),
+    Invite_pid = transactionlayer:get_pid_from_handler(THandler),
+    State = #state{invite=Request, invite_pid=Invite_pid,
+		   handle=Handle, address=Address, port=Port},
     {ok, _TRef} = timer:send_after(20000, timeout),
     {ok, State1} = execute(State),
     {ok, State1}.
@@ -248,14 +269,25 @@ execute(State) ->
 %%     Target = "dumb/",
 %%     Call_to = "tone/congestion",
 %%     Target = "tone/busy",
-    Call_to = "tone/congestion",
-    Target = "mikael",
+%%     Call_to = "tone/congestion",
+    Call_to = "dumb/",
+%%     Target = "mikael",
 %%     Call_to = "sip/sip:1002@mulder",
 %%     Target = "tone/congestion",
     Handle = State#state.handle,
+    Request = State#state.invite,
+    Uri = Request#request.uri,
+    Target = Uri#sipurl.user,
+    ok = yate:watch(Handle, call.answered,
+		    fun(_Cmd) ->
+			    true
+%% 			    Id == dict:fetch(id, Cmd#command.keys)
+		    end),
     {ok, _RetValue, RetCmd} =
 	yate:send_msg(Handle, call.execute,
 		      [
+		       {caller, "1234"},
+		       {callname, "mikael"},
 		       {callto, Call_to},
 %% 		       {direct, Target}
 		       {target, Target}
@@ -264,10 +296,6 @@ execute(State) ->
     Id = dict:fetch(id, RetCmd#command.keys),
     State1 = State#state{id=Id},
     ok = yate:watch(Handle, chan.hangup,
-		    fun(Cmd) ->
-			    Id == dict:fetch(id, Cmd#command.keys)
-		    end),
-    ok = yate:watch(Handle, call.answered,
 		    fun(Cmd) ->
 			    Id == dict:fetch(id, Cmd#command.keys)
 		    end),
@@ -316,8 +344,30 @@ play_rtp(State, Id) ->
 
     Localip = dict:fetch(localip, RetCmd#command.keys),
     Localport = list_to_integer(dict:fetch(localport, RetCmd#command.keys)),
+    %% FIXME Contact
+    Contact = "<sip:dummy@192.168.0.4:5080>",
+
+    {ok, Dialog} = create_dialog(State#state.invite, Contact),
 
     %% TODO add body
+    {ok, Body} = create_sdp_body(Localip, Localport),
+    ExtraHeaders = [
+		    {"Contact", [Contact]}
+		   ],
+    Request = State#state.invite,
+    ok = send_response(Request, 183, "Session Progress", ExtraHeaders, Body),
+    {ok, State#state{sdp_body=Body,contact=Contact,dialog=Dialog}}.
+
+answer(State, Id) ->
+    {ok, _RetValue, _RetCmd} =
+	yate:send_msg(State#state.handle, chan.masquerade,
+		      [
+		       {message, "call.answered"},
+		       {id, Id}
+		      ]),
+    ok.
+
+create_sdp_body(Localip, Localport) ->
     Seconds = integer_to_list(yate_util:seconds()),
     Origin = #sdp_origin{username="-", session_id=Seconds, version=Seconds,
 			 network_type='IN', address_type='IP4',
@@ -328,44 +378,43 @@ play_rtp(State, Id) ->
 		       fmts=[8], connection=Connection},
     Sdp = #sdp{origin=Origin, session_name="Yxa", media=[Media]},
     Body = list_to_binary(lists:flatten(sdp:print(Sdp))),
-    ExtraHeaders = [
-		   ],
-    Request = State#state.invite,
-    ok = send_response(Request, 183, "Session Progress", ExtraHeaders, Body),
+    {ok, Body}.
 
-    {ok, State}.
+create_dialog(Request, Contact) ->
+    THandler = transactionlayer:get_handler_for_request(Request),
+    {ok, ToTag} = transactionlayer:get_my_to_tag(THandler),
+    {ok, Dialog} = sipdialog:create_dialog_state_uas(Request, ToTag, Contact),
+    ok = sipdialog:register_dialog_controller(Dialog, self()),
+    {ok, Dialog}.
 
+%% create_dialog(Request) ->
+%%     THandler = transactionlayer:get_handler_for_request(Request),
+%%     {ok, ToTag} = transactionlayer:get_my_to_tag(THandler),
+%%     To = keylist:fetch('to', Request#request.header),
+%%     logger:log(normal, "sipclient: INVITE ~p ~p", [To, THandler]),
+%%     [ToContact] = contact:parse(To),
+%%     Contact = "sip:dummy@localhost",
 
-answer(State, Id) ->
-    {ok, _RetValue, RetCmd} =
-	yate:send_msg(State#state.handle, chan.masquerade,
-		      [
-		       {message, "call.answered"},
-		       {id, Id}
-		      ]),
-    ok.
+%%     TaggedTo = contact:add_param(ToContact, "tag", ToTag),
+%%     Header = keylist:from_list([{"To",	    [contact:print(TaggedTo)]},
+%% 				{"Contact", [Contact]}]),
+%%     Response = #response{header=Header},
+%%     {ok, Dialog} = sipdialog:create_dialog_state_uas(Request, Response),
+%%     ok = sipdialog:register_dialog_controller(Dialog, self()),
+%%     {ok, Dialog}.
 
-
+%% TODO move 200ok to separate process and retransmitt
 send_200ok(State) ->
     Request = State#state.invite,
-    THandler = transactionlayer:get_handler_for_request(Request),
-%%    LogTag = get_branchbase_from_handler(THandler),
-    {ok, ToTag} = transactionlayer:get_my_to_tag(THandler),
-    To = keylist:fetch('to', Request#request.header),
-    [ToContact] = contact:parse(To),
-    logger:log(normal, "sipclient: INVITE ~p ~p", [To, THandler]),
-    Contact = "sip:dummy@localhost",
+    Contact = State#state.contact,
+    Body = State#state.sdp_body,
 
-    TaggedTo = contact:add_param(ToContact, "tag", ToTag),
-    Header = keylist:from_list([{"To",	    [contact:print(TaggedTo)]},
-				{"Contact", [Contact]}]),
-    Response = #response{header=Header},
-    {ok, Dialog} = sipdialog:create_dialog_state_uas(Request, Response),
     %%DialogId = {Dialog#dialog.callid, Dialog#dialog.local_tag, Dialog#dialog.remote_tag},
-    ok = sipdialog:register_dialog_controller(Dialog, self()),
-    ok = send_response(Request, 200, "Ok"),
-    {ok, #state{dialog=Dialog}}.
-
+    ExtraHeaders = [
+		    {"Contact", [Contact]}
+		   ],
+    ok = send_response(Request, 200, "Ok", ExtraHeaders, Body),
+    ok.
 
 send_response(Request, Status, Reason) ->
     send_response(Request, Status, Reason, []).
@@ -396,7 +445,16 @@ handle_cast(Request, State) ->
     error_logger:error_msg("Unhandled cast in ~p: ~p~n", [?MODULE, Request]),
     {noreply, State}.
 
-
+handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, #state{invite_pid=Pid}=State) ->
+    %% FIXME
+    logger:log(normal, "servertransaction_cancelled ~n", []),
+    ok = send_response(State#state.invite, 487, "Request Terminated"),
+    ok = drop(State#state.handle, State#state.id),
+    {noreply, State};
+handle_info({servertransaction_terminating, Pid}, #state{invite_pid=Pid}=State) ->
+    %% FIXME
+    logger:log(normal, "servertransaction_terminating ~n", []),
+    {noreply, State};
 handle_info(timeout, State) ->
     ok = send_response(State#state.invite, 408, "Request Timeout"),
     ok = drop(State#state.handle, State#state.id),
@@ -423,9 +481,12 @@ handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _O
     %% TODO update dialog timeout?
     FromPid ! {ok, self(), Ref},
 %%     logger:log(normal, "Dialog received ACK"),
-    {ok, Request, NewDialog} = generate_new_request("BYE", State#state.dialog),
-    {ok, Pid, Branch} = send_request(Request),
-    {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
+    {noreply, State};
+
+%% Send bye
+%%     {ok, Request, NewDialog} = generate_new_request("BYE", State#state.dialog),
+%%     {ok, Pid, Branch} = send_request(Request),
+%%     {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
 
 %%    {noreply, State};
 handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State) ->
@@ -468,7 +529,7 @@ terminate(_Reason, _State) ->
 
 
 drop(Handle, Id) ->
-    {ok, _RetValue, RetCmd} =
+    {ok, _RetValue, _RetCmd} =
 	yate:send_msg(Handle, call.drop,
 		      [
 		       {id, Id}
@@ -477,8 +538,6 @@ drop(Handle, Id) ->
 
 send_request(Request) ->
     Branch = siprequest:generate_branch(),
-    Timeout = 30,
-
     Route = keylist:fetch('route', Request#request.header),
     TargetURI = Request#request.uri,
     Dst = case Route of
@@ -502,8 +561,14 @@ handle_command(message, Dir, Cmd, From, State) ->
 handle_message(chan.hangup, ans, Cmd, _From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
     error_logger:info_msg("Call hangup ~p~n", [Id]),
-    {stop, normal, State};
-handle_message(chan.answer, ans, Cmd, _From, State) ->
+    %% TODO distinguish CANCEL and BYE
+    %% Send bye
+    {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
+					       State#state.contact),
+    {ok, Pid, Branch} = send_request(Bye),
+    {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
+handle_message(call.answered, ans, Cmd, _From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
     error_logger:info_msg("Handle answer ~p~n", [Id]),
+    ok = send_200ok(State),
     {noreply, State}.
