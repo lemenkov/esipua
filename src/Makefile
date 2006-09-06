@@ -7,10 +7,13 @@ sipclient.erl ysip_srv.erl sdp.erl
 
 beam_FILES = $(erl_FILES:.erl=.beam)
 
+
 ERLC = erlc
 ERL = erl
 
-ERLFLAGS = -pz /usr/lib/yxa/ebin
+#ERLFLAGS = -pz /usr/lib/yxa/ebin
+YXABUILDDIR = /home/mikael/tmp/cvs/yxa/build_linux
+ERLFLAGS = -pz $(YXABUILDDIR) -pz $(YXABUILDDIR)/src -pz $(YXABUILDDIR)/src/cpl -pz $(YXABUILDDIR)/src/database -pz $(YXABUILDDIR)/src/eldap -pz $(YXABUILDDIR)/src/event -pz $(YXABUILDDIR)/src/local -pz $(YXABUILDDIR)/src/mysql -pz $(YXABUILDDIR)/src/sipuserdb -pz $(YXABUILDDIR)/src/config -pz $(YXABUILDDIR)/src/transactionlayer -pz $(YXABUILDDIR)/src/include -pz $(YXABUILDDIR)/src/transportlayer -pz $(YXABUILDDIR)/src/event_handler
 EFLAGS = $(ERLFLAGS) -I../include -I/usr/lib/yxa/include
 
 all: $(beam_FILES) yate.boot yate_demo.boot
