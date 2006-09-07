@@ -328,8 +328,8 @@ play_rtp(State, Id) ->
 		       {message, "chan.attach"},
 		       {id, Id},
 		       {notify, tag},
-		       {source, "rtp/fixme"},
- 		       {consumer, "rtp/fixme"},
+		       {source, "rtp/*"},
+ 		       {consumer, "rtp/*"},
 		       {remoteip, State#state.address},
 		       {remoteport, State#state.port},
 		       {format, "alaw"}
@@ -502,6 +502,7 @@ handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State
 			%% answer BYE with 200 Ok
 			transactionlayer:send_response_handler(THandler, 200, "Ok"),
 			logger:log(normal, "Dialog ended by remote end (using BYE)"),
+			ok = drop(State#state.handle, State#state.id),
 			{stop, NewDialog1};
 		    _ ->
 			%% answer all unknown requests with 501 Not Implemented
