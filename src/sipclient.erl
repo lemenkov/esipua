@@ -239,14 +239,6 @@ init2(Client, Request, LogStr, _BranchBase) ->
     {ok, _TRef} = timer:send_after(20000, timeout),
     {ok, State1} = execute(State),
     {ok, State1}.
-%%     {ok, State1} = send_102(State),
-%%     {ok, State1}.
-%%     {ok, State}.
-%%     {ok, State1} = send_200ok(State),
-%%     {ok, State1}.
-%%     {ok, Id} = execute(State),
-%%     logger:log(normal, "sipclient: execute ~p~n", [Id]),
-%%     {ok, State#state{id=Id}}.
 
 parse_sdp(Request) ->
     logger:log(normal, "sipclient: foo~n"),
@@ -265,15 +257,7 @@ parse_sdp(Request) ->
     {ok, Address, Port}.
 
 execute(State) ->
-%%     Call_to = "tone/congestion",
-%%     Target = "dumb/",
-%%     Call_to = "tone/congestion",
-%%     Target = "tone/busy",
-%%     Call_to = "tone/congestion",
     Call_to = "dumb/",
-%%     Target = "mikael",
-%%     Call_to = "sip/sip:1002@mulder",
-%%     Target = "tone/congestion",
     Handle = State#state.handle,
     Request = State#state.invite,
     Uri = Request#request.uri,
@@ -289,7 +273,6 @@ execute(State) ->
 		       {caller, "1234"},
 		       {callname, "mikael"},
 		       {callto, Call_to},
-%% 		       {direct, Target}
 		       {target, Target}
 		      ]),
     logger:log(normal, "sipclient: RetCmd ~p~n", [dict:to_list(RetCmd#command.keys)]),
@@ -299,15 +282,9 @@ execute(State) ->
 		    fun(Cmd) ->
 			    Id == dict:fetch(id, Cmd#command.keys)
 		    end),
-%%     ok = yate:watch(Handle, chan.startup,
-%% 		    fun(Cmd) ->
-%% 			    Id == dict:fetch(id, Cmd#command.keys)
-%% 		    end),
     {ok, State1b} = startup(State1, Id),
     {ok, State2} = play_rtp(State1b, State1b#state.id),
-%%     ok = answer(State2, State2#state.peerid),
     {ok, State2}.
-%%     {ok, State1}.
 
 startup(State, Id) ->
     {ok, _RetValue, RetCmd} =
@@ -387,29 +364,12 @@ create_dialog(Request, Contact) ->
     ok = sipdialog:register_dialog_controller(Dialog, self()),
     {ok, Dialog}.
 
-%% create_dialog(Request) ->
-%%     THandler = transactionlayer:get_handler_for_request(Request),
-%%     {ok, ToTag} = transactionlayer:get_my_to_tag(THandler),
-%%     To = keylist:fetch('to', Request#request.header),
-%%     logger:log(normal, "sipclient: INVITE ~p ~p", [To, THandler]),
-%%     [ToContact] = contact:parse(To),
-%%     Contact = "sip:dummy@localhost",
-
-%%     TaggedTo = contact:add_param(ToContact, "tag", ToTag),
-%%     Header = keylist:from_list([{"To",	    [contact:print(TaggedTo)]},
-%% 				{"Contact", [Contact]}]),
-%%     Response = #response{header=Header},
-%%     {ok, Dialog} = sipdialog:create_dialog_state_uas(Request, Response),
-%%     ok = sipdialog:register_dialog_controller(Dialog, self()),
-%%     {ok, Dialog}.
-
 %% TODO move 200ok to separate process and retransmitt
 send_200ok(State) ->
     Request = State#state.invite,
     Contact = State#state.contact,
     Body = State#state.sdp_body,
 
-    %%DialogId = {Dialog#dialog.callid, Dialog#dialog.local_tag, Dialog#dialog.remote_tag},
     ExtraHeaders = [
 		    {"Contact", [Contact]}
 		   ],
@@ -423,8 +383,6 @@ send_response(Request, Status, Reason, ExtraHeaders) ->
     send_response(Request, Status, Reason, ExtraHeaders, <<>>).
 
 send_response(Request, Status, Reason, ExtraHeaders, Body) ->
-%%     THandler = transactionlayer:get_handler_for_request(Request),
-%%     transactionlayer:send_response_handler(THandler, Status, Reason, ExtraHeaders, Body).
     transactionlayer:send_response_request(Request, Status, Reason, ExtraHeaders, Body).
 
 
@@ -483,12 +441,6 @@ handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _O
 %%     logger:log(normal, "Dialog received ACK"),
     {noreply, State};
 
-%% Send bye
-%%     {ok, Request, NewDialog} = generate_new_request("BYE", State#state.dialog),
-%%     {ok, Pid, Branch} = send_request(Request),
-%%     {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
-
-%%    {noreply, State};
 handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State) ->
     THandler = transactionlayer:get_handler_for_request(NewRequest),
     FromPid ! {ok, self(), Ref},
