@@ -43,18 +43,9 @@ init() ->
     [Tables, stateful, {append, [Server]}].
 
 request(#request{method="OPTIONS"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
-%%     THandler = transactionlayer:get_handler_for_request(Request),
-%%    LogTag = get_branchbase_from_handler(THandler),
-%%     To = keylist:fetch('to', Request#request.header),
-%%     [ToContact] = contact:parse(To),
-%%     ToTag = "dummy-tag",
-%%     TaggedTo = contact:add_param(ToContact, "tag", ToTag),
     logger:log(normal, "sipclient: Options ~s", [LogStr]),
     send_response(Request, 200, "Ok");
 request(#request{method="INVITE"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
-    %% Send 404
-    %% send_response(Request, 603, "Decline");
-    %% Start dialog and send 200 Ok
     ysip_srv:invite(Request, LogStr);
 request(_Request, _Origin, LogStr) ->
     logger:log(normal, "sipclient: Request ~s", [LogStr]),
@@ -81,10 +72,6 @@ test() ->
     Method = "OPTIONS",
     SDP = [],
     Contact = "sip:contact@localhost",
-%%  #contact{display_name = none,
-%% 		       urlstr = "sip:contact@localhost",
-%% 		       contact_param = contact_param:to_norm([])
-%% 		      },
     {ok, Request, _CallId, _FromTag} =
 	start_generate_request(Method,
                                From,
@@ -329,8 +316,6 @@ setup(State) ->
 
     {ok, State1b} = startup(State, Id),
     {ok, State1b#state{contact=Contact,dialog=Dialog}}.
-%%     {ok, State2} = start_rtp(State1b, State1b#state.id),
-%%     {ok, State2}.
 
 startup(State, Id) ->
     {ok, _RetValue, RetCmd} =
