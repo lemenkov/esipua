@@ -29,8 +29,7 @@ stop() ->
 
 invite(Request, LogStr) ->
     Client = gen_server:call(?SERVER, get_client),
-    {ok, Pid} = sipclient:start_link(Client, Request, LogStr),
-    sipclient:process(Pid).
+    sipclient:start_link(Client, Request, LogStr).
     
 
 %%
