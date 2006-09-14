@@ -253,27 +253,6 @@ execute(State) ->
     Request = State#state.invite,
     Uri = Request#request.uri,
     Target = Uri#sipurl.user,
-    ok = yate:watch(Handle, call.progress,
-		    fun(_Cmd) ->
-			    true
-		    end),
-    ok = yate:watch(Handle, call.ringing,
-		    fun(_Cmd) ->
-			    true
-		    end),
-    ok = yate:watch(Handle, call.drop,
-		    fun(_Cmd) ->
-			    true
-		    end),
-    ok = yate:watch(Handle, chan.disconnected,
-		    fun(_Cmd) ->
-			    true
-		    end),
-    ok = yate:watch(Handle, call.answered,
-		    fun(_Cmd) ->
-			    true
-%% 			    Id == dict:fetch(id, Cmd#command.keys)
-		    end),
     {ok, RetValue, RetCmd} =
 	yate:send_msg(Handle, call.execute,
 		      [
@@ -300,9 +279,31 @@ setup(State) ->
     Handle = State#state.handle,
     Request = State#state.invite,
     Id = State#state.id,
+    ok = yate:watch(Handle, chan.disconnected,
+		    fun(Cmd) ->
+			    Id == dict:fetch(id, Cmd#command.keys)
+		    end),
+    ok = yate:watch(Handle, call.ringing,
+		    fun(Cmd) ->
+ 			    Id == dict:fetch(targetid, Cmd#command.keys)
+		    end),
+
     ok = yate:watch(Handle, chan.hangup,
 		    fun(Cmd) ->
 			    Id == dict:fetch(id, Cmd#command.keys)
+		    end),
+    ok = yate:watch(Handle, call.progress,
+		    fun(Cmd) ->
+			    Id == dict:fetch(targetid, Cmd#command.keys)
+		    end),
+    ok = yate:watch(Handle, call.answered,
+		    fun(Cmd) ->
+			    Id == dict:fetch(targetid, Cmd#command.keys)
+		    end),
+    ok = yate:watch(Handle, call.drop,
+		    fun(Cmd) ->
+			    %% Check
+			    Id == dict:fetch(targetid, Cmd#command.keys)
 		    end),
 
     %% FIXME Contact
