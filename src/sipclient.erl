@@ -315,10 +315,10 @@ setup(State) ->
     Contact = "<sip:dummy@192.168.0.4:5080>",
     {ok, Dialog} = create_dialog(Request, Contact),
 
-%%     ExtraHeaders = [
-%% 		    {"Contact", [Contact]}
-%% 		   ],
-%%     ok = send_response(Request, 102, "Dialog Creation", ExtraHeaders),
+    ExtraHeaders = [
+		    {"Contact", [Contact]}
+		   ],
+    ok = send_response(Request, 101, "Dialog Establishment", ExtraHeaders),
 
     {ok, State1b} = startup(State, Id),
     {ok, State1b#state{contact=Contact,dialog=Dialog}}.
