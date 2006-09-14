@@ -253,11 +253,16 @@ execute(State) ->
     Request = State#state.invite,
     Uri = Request#request.uri,
     Target = Uri#sipurl.user,
+    From = keylist:fetch('from', Request#request.header),
+    [FromContact] = contact:parse(From),
+    FromUri = sipurl:parse(FromContact#contact.urlstr),
+    Caller = FromUri#sipurl.user,
+    Caller_name = FromContact#contact.display_name,
     {ok, RetValue, RetCmd} =
 	yate:send_msg(Handle, call.execute,
 		      [
-		       {caller, "1234"},
-		       {callername, "mikael"},
+		       {caller, Caller},
+		       {callername, Caller_name},
 		       {callto, Call_to},
 		       {target, Target}
 		      ]),
