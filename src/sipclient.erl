@@ -573,7 +573,13 @@ handle_message(call.ringing, ans, _Cmd, _From, State) ->
     {noreply, State};
 handle_message(chan.disconnected, ans, Cmd, _From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
-    YReason = dict:fetch(reason, Cmd#command.keys),
+    YReason = 
+	case dict:find(reason, Cmd#command.keys) of
+	    {ok, YReason1} ->
+		YReason1;
+	    _ ->
+		none
+	end,
     error_logger:info_msg("Call disconnect ~p ~p~n", [Id, YReason]),
     %% TODO distinguish CANCEL and BYE
     %% Send bye
@@ -587,8 +593,8 @@ handle_message(chan.disconnected, ans, Cmd, _From, State) ->
 		{404, "Not Found"};
 	    "busy" ->
 		{486, "Busy Here"};
-%% 	    "forbidden" ->
-%% 		{};
+ 	    "forbidden" ->
+ 		{403, "Forbidden"};
 	    _ ->
 		{500, "Internal Server Error"}
 	end,
