@@ -279,7 +279,17 @@ execute(State) ->
 
 fetch_auto_keys(Cmd) ->	    
     Autokeys = [autoanswer, autoringing, autoprogress],
-    fetch_auto_keys(Cmd, Autokeys, []).
+    case fetch_auto_keys(Cmd, Autokeys, []) of
+	{ok, noauto} ->
+	    case dict:find(targetid, Cmd#command.keys) of
+		error ->
+		    {ok, autoanswer};
+		_ ->
+		    {ok, noauto}
+	    end;
+	{ok, Auto} ->
+	    Auto
+    end.
 
 fetch_auto_keys(_Cmd, [], _Res) ->
     {ok, noauto};
