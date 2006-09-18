@@ -55,7 +55,7 @@ request(_Request, _Origin, LogStr) ->
 response(Response, Origin, LogStr) when is_record(Response, response), is_record
 (Origin, siporigin) ->        
     {Status, Reason} = {Response#response.status, Response#response.reason},
-        logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction - proxying statelessly",
+        logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction - dropping",
 		   [LogStr, Status, Reason]),
     transportlayer:send_proxy_response(none, Response),
     ok.
@@ -232,7 +232,6 @@ init2(Client, Request, LogStr, _BranchBase) ->
     execute(State).
 
 parse_sdp(Request) ->
-    logger:log(normal, "sipclient: foo~n"),
     Body = binary_to_list(Request#request.body),
     {ok, Sdp} = sdp:parse(Body),
     [Media|_] = Sdp#sdp.media,
@@ -244,7 +243,6 @@ parse_sdp(Request) ->
     end,
     Address = Conn#sdp_connection.address,
     Port = Media#sdp_media.port,
-    logger:log(normal, "sipclient: connection ~s ~p~n", [Address, Port]),
     {ok, Address, Port}.
 
 execute(State) ->
@@ -266,7 +264,6 @@ execute(State) ->
 		       {callto, Call_to},
 		       {target, Target}
 		      ]),
-    logger:log(normal, "sipclient: RetCmd ~p~n", [dict:to_list(RetCmd#command.keys)]),
     case RetValue of
 	false ->
 	    %% TODO return false
