@@ -311,10 +311,7 @@ setup(State) ->
     Contact = "<sip:dummy@192.168.0.7:5080>",
     {ok, Dialog} = create_dialog(Request, Contact),
 
-    ExtraHeaders = [
-		    {"Contact", [Contact]}
-		   ],
-    ok = send_response(Request, 101, "Dialog Establishment", ExtraHeaders),
+    ok = send_response(State, 101, "Dialog Establishment"),
 
     {ok, State1b} = startup(State, Id),
     {ok, State1b#state{contact=Contact,dialog=Dialog}}.
@@ -405,13 +402,8 @@ create_dialog(Request, Contact) ->
 
 %% TODO move 200ok to separate process and retransmitt
 send_200ok(State) ->
-    Request = State#state.invite,
-    Contact = State#state.contact,
     {ok, State1, Body} = get_sdp_body(State),
-    ExtraHeaders = [
-		    {"Contact", [Contact]}
-		   ],
-    ok = send_response(Request, 200, "Ok", ExtraHeaders, Body),
+    ok = send_response(State1, 200, "Ok", [], Body),
     {ok, State1}.
 
 send_response(Request, Status, Reason) ->
@@ -420,8 +412,21 @@ send_response(Request, Status, Reason) ->
 send_response(Request, Status, Reason, ExtraHeaders) ->
     send_response(Request, Status, Reason, ExtraHeaders, <<>>).
 
-send_response(Request, Status, Reason, ExtraHeaders, Body) ->
+send_response(State, Status, Reason, ExtraHeaders, Body) when is_record(State, state) ->
+    Request = State#state.invite,
+    Contact = State#state.contact,
+    send_response(Request, Status, Reason, ExtraHeaders, Body, Contact);
+send_response(Request, Status, Reason, ExtraHeaders, Body) when is_record(Request, request) ->
     transactionlayer:send_response_request(Request, Status, Reason, ExtraHeaders, Body).
+
+
+send_response(Request, Status, Reason, ExtraHeaders, Body, undefined) when is_record(Request, request) ->
+    send_response(Request, Status, Reason, ExtraHeaders, Body);
+send_response(Request, Status, Reason, ExtraHeaders, Body, Contact) when is_record(Request, request), Status > 299 ->
+    send_response(Request, Status, Reason, ExtraHeaders, Body);
+send_response(Request, Status, Reason, ExtraHeaders, Body, Contact) when is_record(Request, request), Status =< 299 ->
+    ExtraHeaders1 = [{"Contact", [Contact]}] ++ ExtraHeaders,
+    send_response(Request, Status, Reason, ExtraHeaders1, Body).
 
 
 code_change(_OldVsn, State, _Extra) ->
@@ -565,7 +570,7 @@ handle_message(call.answered, ans, Cmd, _From, State) ->
     {noreply, State1};
 handle_message(call.ringing, ans, _Cmd, _From, State) ->
     %% FIXME send sdp if earlymedia=true
-    ok = send_response(State#state.invite, 180, "Ringing"),
+    ok = send_response(State, 180, "Ringing"),
     {noreply, State};
 handle_message(chan.disconnected, ans, Cmd, _From, State) ->
     Id = dict:fetch(id, Cmd#command.keys),
