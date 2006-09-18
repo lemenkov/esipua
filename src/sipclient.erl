@@ -312,7 +312,7 @@ setup(State) ->
 		    end),
 
     %% FIXME Contact
-    Contact = "<sip:dummy@192.168.0.4:5080>",
+    Contact = "<sip:dummy@192.168.0.7:5080>",
     {ok, Dialog} = create_dialog(Request, Contact),
 
     ExtraHeaders = [
