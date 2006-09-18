@@ -57,7 +57,6 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
     {Status, Reason} = {Response#response.status, Response#response.reason},
         logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction - dropping",
 		   [LogStr, Status, Reason]),
-    transportlayer:send_proxy_response(none, Response),
     ok.
 
 test() ->
