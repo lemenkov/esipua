@@ -269,12 +269,28 @@ execute(State) ->
 	    ok = send_response(Request, 404, "Not found"),
 	    ignore;
 	true ->
+	    {ok, Auto} = fetch_auto_keys(RetCmd),
 	    Id = dict:fetch(id, RetCmd#command.keys),
 	    State1 = State#state{id=Id},
 	    {ok, State2} = setup(State1),
-	    {ok, State2}
+	    send_auto_response(State2, Auto)
     end.
 	    
+
+fetch_auto_keys(Cmd) ->	    
+    Autokeys = [autoanswer, autoringing, autoprogress],
+    fetch_auto_keys(Cmd, Autokeys, []).
+
+fetch_auto_keys(_Cmd, [], _Res) ->
+    {ok, noauto};
+fetch_auto_keys(Cmd, [Key|R], Res) ->
+    case dict:find(Key, Cmd#command.keys) of
+	{ok, "true"} ->
+	    {ok, Key};
+	_ ->
+	    fetch_auto_keys(Cmd, R, Res)
+    end.
+
 
 setup(State) ->   
     Handle = State#state.handle,
@@ -311,10 +327,22 @@ setup(State) ->
     Contact = "<sip:dummy@192.168.0.7:5080>",
     {ok, Dialog} = create_dialog(Request, Contact),
 
-    ok = send_response(State, 101, "Dialog Establishment"),
-
     {ok, State1b} = startup(State, Id),
     {ok, State1b#state{contact=Contact,dialog=Dialog}}.
+
+
+send_auto_response(State, noauto) ->
+    ok = send_response(State, 101, "Dialog Establishment"),
+    {ok, State};
+send_auto_response(State, autoringing) ->
+    ok = send_response(State, 180, "Ringing"),
+    {ok, State};
+send_auto_response(State, autoprogress) ->
+    ok = send_response(State, 183, "Session Progress"),
+    {ok, State};
+send_auto_response(State, autoanswer) ->
+    send_200ok(State).
+
 
 startup(State, Id) ->
     {ok, _RetValue, RetCmd} =
