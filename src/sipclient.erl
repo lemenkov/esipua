@@ -26,6 +26,7 @@
 
 -export([init/0, request/3, response/3]).
 -export([test/0, start_generate_request/5]).
+%%-export([call/1]).
 
 -include("siprecords.hrl").
 -include("sipsocket.hrl").
@@ -58,6 +59,13 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
         logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction - dropping",
 		   [LogStr, Status, Reason]),
     ok.
+
+%%
+%% outgoing yate call
+%%
+%% call(Client, Cmd, From, Args) ->
+%%     Id = dict:fetch(id, Cmd#command.keys),
+%%     start_link(Client, Id, Cmd, From, Args).
 
 test() ->
     From = #contact{display_name = none,
