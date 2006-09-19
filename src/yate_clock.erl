@@ -51,13 +51,11 @@ init([Client, Id, ExecCmd, From, _Args]) ->
 			    Id == CmdId
 		    end),
 
-    NewKeys =
-	yate_util:dict_store_list([
+    NewCmd = command:append_keys([
 				   {callto, "dumb/"},
 				   {autoring, false}
 				  ],
-				  ExecCmd#command.keys),
-    NewCmd = ExecCmd#command{keys=NewKeys},
+				  ExecCmd),
     yate:ret(From, NewCmd, false),
 
     {ok, #sstate{handle=Handle, id=Id, waves=Waves}, ?TIMEOUT_WAIT_EXEC}.
