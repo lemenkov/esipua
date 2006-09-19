@@ -116,6 +116,7 @@ terminate(_Reason, State) ->
     Handle = State#state.handle,
     yate:uninstall(Handle, call.route),
     yate:uninstall(Handle, call.execute),
+    yate:close(Handle),
     terminated.
 
 
