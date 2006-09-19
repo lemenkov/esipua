@@ -5,5 +5,6 @@
 "yate_port_srv", "yate_port_sup", "yate_pending", "yate_clock", "sipclient", "ysip_srv", "sdp",
   "yate_call",
   "command",
-  "key_dict"
+  "key_dict",
+  "key_list"
 ], [load, {i, "../include"}, {i, "/usr/lib/yxa/include"}, debug_info]}.

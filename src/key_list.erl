@@ -1,17 +1,28 @@
--module(key_dict).
+-module(key_list).
 
 -export([find/2, fetch/2, encode/1, decode/1]).
 
 
 find(Key, Keys) ->
-    dict:find(Key, Keys).
+    case lists:keysearch(Key, 1, Keys) of
+	{value, {Key, Value}} ->
+	    {ok, Value};
+	false ->
+	    error
+    end.
+
 
 fetch(Key, Keys) ->
-    dict:fetch(Key, Keys).
+    case lists:keysearch(Key, 1, Keys) of
+	{value, {Key, Value}} ->
+	    Value;
+	false ->
+	    exit({not_found, Key, Keys})
+    end.
 
 
 encode(Keys) ->
-    yate_encode:encode_dict(key, Keys).
+    yate_encode:encode_list(key, Keys).
 
 
 decode(KeyStrs) ->
@@ -24,11 +35,11 @@ decode([KeyStr|R], Keys) ->
     Name = list_to_atom(NameStr),
     case Keys of
 	undefined ->
-	    NewKeys = dict:new();
+	    NewKeys = [];
 	_ ->
 	    NewKeys = Keys
     end,
-    decode(R, dict:store(Name, Value, NewKeys)).
+    decode(R, [{Name, Value}|NewKeys]).
 
 decode_key(KeyStr) ->
     decode_key(KeyStr, []).
