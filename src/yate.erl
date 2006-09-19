@@ -39,9 +39,8 @@ dup({yate_client, Client, _UserPid}) ->
     link(Client),
     {ok, {yate_client, Client, UserPid}}.
 
-close({yate_client, Client, _UserPid}) ->
-    unlink(Client),
-    ok.
+close(Handle) ->
+    call(Handle, close).
 
 %%--------------------------------------------------------------------
 %% @spec watch(Handle, Name, Fun) -> true

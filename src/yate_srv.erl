@@ -111,6 +111,11 @@ handle_call({client, {msg, Name, Keys}, _Pid}, From, State) ->
     ok = yate_conn:queue_msg(State#sstate.conn, Name, Keys, {send, From}),
     {noreply, State};
 
+handle_call({client, close, Pid}, From, State) ->
+    {ok, State1} = uninstall_pid(Pid, State),
+    unlink(Pid),
+    {reply, ok, State1};
+
 handle_call(Request, _From, State) ->
     error_logger:error_msg("Unsupported call in ~p: ~p~n", [?MODULE, Request]),
     {reply, ok, State}.
@@ -205,6 +210,29 @@ install(Type, Name, Pid, Fun, State, Installed) ->
     PidEntry = #pidentry{type=Type, name=Name},
     NewPids = dict:append(Pid, PidEntry, State#sstate.pids),
     {ok, NewInstalled, NewPids}.
+
+
+uninstall_pid(Pid, State) ->
+    case dict:find(Pid, State#sstate.pids) of
+	{ok, Entry} ->
+	    {ok, State1} = uninstall_pid(Pid, Entry, State),
+	    {ok, State1#sstate{pids=dict:erase(Pid, State1#sstate.pids)}};
+	error ->
+	    {ok, State}
+    end.
+
+uninstall_pid(Pid, [], State) ->
+    {ok, State};
+uninstall_pid(Pid, [PidEntry=#pidentry{type=watch}|R], State) ->
+    {ok, Watched1, Pids1} = uninstall(watch, PidEntry#pidentry.name,
+					Pid, State, State#sstate.watched),
+    uninstall_pid(Pid, R, State#sstate{watched=Watched1});
+uninstall_pid(Pid, [PidEntry=#pidentry{type=install}|R], State) ->
+    {ok, Installed1, Pids1} = uninstall(install, PidEntry#pidentry.name,
+					Pid, State, State#sstate.installed),
+    uninstall_pid(Pid, R, State#sstate{installed=Installed1}).
+
+
 
 uninstall(Type, Name, Pid, State, Installed) ->
     InstallList = dict:fetch(Name, Installed),
