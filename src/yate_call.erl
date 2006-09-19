@@ -43,29 +43,29 @@ setup_watches(State) ->
     Id = State#state.id,
     ok = yate:watch(Handle, chan.disconnected,
 		    fun(Cmd) ->
-			    Id == dict:fetch(id, Cmd#command.keys)
+			    Id == command:fetch_key(id, Cmd)
 		    end),
     ok = yate:watch(Handle, call.ringing,
 		    fun(Cmd) ->
- 			    Id == dict:fetch(targetid, Cmd#command.keys)
+ 			    Id == command:fetch_key(targetid, Cmd)
 		    end),
 
     ok = yate:watch(Handle, chan.hangup,
 		    fun(Cmd) ->
-			    Id == dict:fetch(id, Cmd#command.keys)
+			    Id == command:fetch_key(id, Cmd)
 		    end),
     ok = yate:watch(Handle, call.progress,
 		    fun(Cmd) ->
-			    Id == dict:fetch(targetid, Cmd#command.keys)
+			    Id == command:fetch_key(targetid, Cmd)
 		    end),
     ok = yate:watch(Handle, call.answered,
 		    fun(Cmd) ->
-			    Id == dict:fetch(targetid, Cmd#command.keys)
+			    Id == command:fetch_key(targetid, Cmd)
 		    end),
     ok = yate:watch(Handle, call.drop,
 		    fun(Cmd) ->
 			    %% Check
-			    Id == dict:fetch(targetid, Cmd#command.keys)
+			    Id == command:fetch_key(targetid, Cmd)
 		    end),
     ok.
 
