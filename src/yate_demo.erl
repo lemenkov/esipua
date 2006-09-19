@@ -129,7 +129,6 @@ handle_command(message, ans, _Cmd, _From, State) ->
 
 handle_message(call.execute, Cmd, From, State) ->
     Callto = command:fetch_key(callto, Cmd),
-    error_logger:info_msg("Handle Call execute ~p.~n", [Callto]),
     handle_call_execute(Callto, Cmd, From, State);
 handle_message(call.route, Cmd, From, State) ->
     handle_call_route(command:fetch_key(called, Cmd), Cmd, From, State).
@@ -140,6 +139,7 @@ handle_call_execute("erl/" ++ String, Cmd, From, State) ->
 
     ModuleName = list_to_atom(File),
     Func = list_to_atom(FuncStr),
+    error_logger:info_msg("Handle Call execute ~p ~p ~p.~n", [ModuleName, Func, Args]),
     case catch apply(ModuleName, Func,
 		     [State#state.client, Cmd, From, Args]) of
 	{'EXIT', Term} ->
