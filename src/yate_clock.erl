@@ -24,7 +24,7 @@
 -define(TIMEOUT_WAIT_EXEC, 10000). %% 10s
 
 start(Client, Cmd, From, Args) ->
-    Id = dict:fetch(id, Cmd#command.keys),
+    Id = command:fetch_key(id, Cmd),
     start_link(Client, Id, Cmd, From, Args).
 
 %%--------------------------------------------------------------------
@@ -47,7 +47,7 @@ init([Client, Id, ExecCmd, From, _Args]) ->
     {ok, Handle} = yate:open(Client),
     ok = yate:watch(Handle, call.execute, 
 		    fun(Cmd) ->
-			    CmdId = dict:fetch(id, Cmd#command.keys),
+			    CmdId = command:fetch_key(id, Cmd),
 			    Id == CmdId
 		    end),
 
@@ -100,35 +100,35 @@ handle_command(message, Dir, Cmd, From, State) ->
 
 
 handle_message(call.execute, ans, Cmd, _From, State) ->
-    Id = dict:fetch(id, Cmd#command.keys),
-    Peerid = dict:fetch(peerid, Cmd#command.keys),
+    Id = command:fetch_key(id, Cmd),
+    Peerid = command:fetch_key(peerid, Cmd),
     error_logger:info_msg("Call execute ~p. answer~n", [Peerid]),
     ok = yate:watch(State#sstate.handle, chan.hangup,
 		    fun(Cmd1) ->
-			    Peerid == dict:fetch(id, Cmd1#command.keys)
+			    Peerid == command:fetch_key(id, Cmd1)
 		    end),
     ok = yate:install(State#sstate.handle, chan.dtmf,
 		    fun(Cmd1) ->
-			    Peerid == dict:fetch(peerid, Cmd1#command.keys)
-			    %%Peerid == dict:fetch(targetid, Cmd1#command.keys)
+			    Peerid == command:fetch_key(peerid, Cmd1)
+			    %%Peerid == command:fetch_key(targetid, Cmd1)
 		    end),
     ok = yate:install(State#sstate.handle, chan.notify,
 		    fun(Cmd1) ->
-			    Id == dict:fetch(targetid, Cmd1#command.keys)
+			    Id == command:fetch_key(targetid, Cmd1)
 		    end),
 
     ok = answer(Id, Cmd, State),
     [Wave_file | R] = State#sstate.waves,
-    TargetId = dict:fetch(targetid, Cmd#command.keys),
+    TargetId = command:fetch_key(targetid, Cmd),
     ok = play_wave(TargetId, State, Wave_file),
     {noreply, State#sstate{peer_id=Peerid,waves=R}};
 handle_message(chan.notify, req, Cmd, From, State) ->
-    Id = dict:fetch(targetid, Cmd#command.keys),
+    Id = command:fetch_key(targetid, Cmd),
     error_logger:info_msg("Notify ~p~n", [Id]),
     yate:ret(From, Cmd, true),
     handle_notify(State#sstate.waves, State);
 handle_message(chan.hangup, ans, Cmd, _From, State) ->
-    Id = dict:fetch(id, Cmd#command.keys),
+    Id = command:fetch_key(id, Cmd),
     error_logger:info_msg("Call hangup ~p~n", [Id]),
     {stop, normal, State}.
 
@@ -170,7 +170,7 @@ answer(Id, Cmd, State) ->
 	yate:send_msg(Handle, chan.masquerade,
 		      [
 		       {message, call.answered},
-		       {id, dict:fetch(targetid, Cmd#command.keys)},
+		       {id, command:fetch_key(targetid, Cmd)},
  		       {targetid, Id},
 		       {module, "erlang"}
 		      ]),
