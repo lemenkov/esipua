@@ -164,10 +164,10 @@ terminate(Reason, _State) ->
 queue_message(Name, Keys, Tag, State) ->
     Time = yate_util:seconds(),
     Header = #message{time=Time,name=Name,retvalue=""},
-    KeyDict = dict:from_list(Keys),
     Id = erlang:ref_to_list(make_ref()),
-    Cmd = #command{id=Id,type=message,header=Header,keys=KeyDict},
-    {ok, NewState} = queue_command(req, Cmd, Tag, State),
+    Cmd = #command{id=Id,type=message,header=Header},
+    Cmd1 = command:append_keys(Keys, Cmd),
+    {ok, NewState} = queue_command(req, Cmd1, Tag, State),
     {ok, NewState}.
 
 

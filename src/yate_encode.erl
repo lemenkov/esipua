@@ -82,8 +82,8 @@ encode_dict(Type, Dict) ->
 encode_list(_Type, undefined) ->
     [];
 encode_list(Type, List) ->
-    Fun = fun(Key, Value, AccIn) -> encode_dict_item(Key, Value, AccIn) end,
-    {Type, Res} = list:foldl(Fun, {Type, []}, List),
+    Fun = fun({Key, Value}, AccIn) -> encode_dict_item(Key, Value, AccIn) end,
+    {Type, Res} = lists:foldl(Fun, {Type, []}, List),
     Res.
 
 encode_dict_item(Key, Value, {Type, Res}) ->

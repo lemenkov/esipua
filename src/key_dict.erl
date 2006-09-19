@@ -9,6 +9,8 @@ find(Key, Keys) ->
 fetch(Key, Keys) ->
     dict:fetch(Key, Keys).
 
+append(List, undefined) ->
+    dict:from_list(List);
 append(List, Keys) ->
     yate_util:dict_store_list(List, Keys).
 

@@ -21,8 +21,10 @@ fetch(Key, Keys) ->
     end.
 
 
+append(List, undefined) ->
+    List;
 append(List, Keys) ->
-    [List|Keys].
+    Keys ++ List.
 
 
 encode(Keys) ->
