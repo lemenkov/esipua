@@ -49,13 +49,11 @@ init([Client, Id, ExecCmd, From, _Args]) ->
 %%     ok = yate:install(Handle, chan.notify),
 
 %%     Handle = State#sstate.handle,
-    NewKeys =
-	yate_util:dict_store_list([
+    NewCmd = command:append_keys([
 				   {callto, "dumb/"},
 				   {autoring, true}
 				  ],
-				  ExecCmd#command.keys),
-    NewCmd = ExecCmd#command{keys=NewKeys},
+				  ExecCmd),
     yate:ret(From, NewCmd, false),
 
     {ok, route, #sstate{handle=Handle, id=Id}, ?TIMEOUT_WAIT_EXEC}.

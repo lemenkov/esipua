@@ -1,6 +1,6 @@
 -module(key_list).
 
--export([find/2, fetch/2, encode/1, decode/1]).
+-export([find/2, fetch/2, encode/1, decode/1, append/2]).
 
 
 find(Key, Keys) ->
@@ -19,6 +19,10 @@ fetch(Key, Keys) ->
 	false ->
 	    exit({not_found, Key, Keys})
     end.
+
+
+append(List, Keys) ->
+    [List|Keys].
 
 
 encode(Keys) ->

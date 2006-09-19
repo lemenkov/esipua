@@ -1,6 +1,6 @@
 -module(key_dict).
 
--export([find/2, fetch/2, encode/1, decode/1]).
+-export([find/2, fetch/2, encode/1, decode/1, append/2]).
 
 
 find(Key, Keys) ->
@@ -9,6 +9,8 @@ find(Key, Keys) ->
 fetch(Key, Keys) ->
     dict:fetch(Key, Keys).
 
+append(List, Keys) ->
+    yate_util:dict_store_list(List, Keys).
 
 encode(Keys) ->
     yate_encode:encode_dict(key, Keys).
