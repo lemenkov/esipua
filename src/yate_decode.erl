@@ -26,38 +26,38 @@ decode_command(install, ans, [PrioStr, NameStr, SuccessStr | KeyStrs]) ->
     Prio = decode_prio(PrioStr),
     Name = decode_name(NameStr),
     Success = decode_success(SuccessStr),
-    Keys = decode_keys(KeyStrs),
+    Keys = command:decode_keys(KeyStrs),
     Header = #install{priority=Prio},
     {ok, #command{type=install,id=Name,success=Success,header=Header,keys=Keys}};
 decode_command(uninstall, ans, [PrioStr, NameStr, SuccessStr | KeyStrs]) ->
     Prio = decode_prio(PrioStr),
     Name = decode_name(NameStr),
     Success = decode_success(SuccessStr),
-    Keys = decode_keys(KeyStrs),
+    Keys = command:decode_keys(KeyStrs),
     Header = #uninstall{priority=Prio},
     {ok, #command{type=uninstall,id=Name,success=Success,header=Header,keys=Keys}};
 decode_command(watch, ans, [NameStr, SuccessStr | KeyStrs]) ->
     Name = decode_name(NameStr),
     Success = decode_success(SuccessStr),
-    Keys = decode_keys(KeyStrs),
+    Keys = command:decode_keys(KeyStrs),
     {ok, #command{type=watch,id=Name,success=Success,keys=Keys}};
 decode_command(unwatch, ans, [NameStr, SuccessStr | KeyStrs]) ->
     Name = decode_name(NameStr),
     Success = decode_success(SuccessStr),
-    Keys = decode_keys(KeyStrs),
+    Keys = command:decode_keys(KeyStrs),
     {ok, #command{type=unwatch,id=Name,success=Success,keys=Keys}};
 decode_command(message, req, [IdStr, TimeStr, NameStr, RetStr | KeyStrs]) ->
     Id = decode_id(IdStr),
     Time = decode_time(TimeStr),
     Name = decode_name(NameStr),
-    Keys = decode_keys(KeyStrs),
+    Keys = command:decode_keys(KeyStrs),
     Header = #message{time=Time,name=Name,retvalue=RetStr},
     {ok, #command{type=message,id=Id,header=Header,keys=Keys}};
 decode_command(message, ans, [IdStr, ProcessedStr, NameStr, RetStr | KeyStrs]) ->
     Id = decode_id(IdStr),
     Success = decode_processed(ProcessedStr),
     Name = decode_name(NameStr),
-    Keys = decode_keys(KeyStrs),
+    Keys = command:decode_keys(KeyStrs),
     Header = #message{name=Name,retvalue=RetStr},
     {ok, #command{type=message,id=Id,header=Header,success=Success,keys=Keys}}.
 
@@ -84,30 +84,6 @@ decode_time(TimeStr) ->
 
 decode_name(NameStr) ->
     list_to_atom(NameStr).
-
-decode_keys(KeyStrs) ->
-    decode_keys(KeyStrs, undefined).
-
-decode_keys([], Keys) ->
-    Keys;
-decode_keys([KeyStr|R], Keys) ->
-    {NameStr, Value} = decode_key(KeyStr),
-    Name = list_to_atom(NameStr),
-    case Keys of
-	undefined ->
-	    NewKeys = dict:new();
-	_ ->
-	    NewKeys = Keys
-    end,
-    decode_keys(R, dict:store(Name, Value, NewKeys)).
-
-decode_key(KeyStr) ->
-    decode_key(KeyStr, []).
-
-decode_key([$=|Value], Name) ->
-    {Name, Value};
-decode_key([C|R], Name) ->
-    decode_key(R, Name ++ [C]).
 
 decode_data(Data) ->
     "%%" ++ Body = string:strip(Data, right, $\n),

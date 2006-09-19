@@ -5,7 +5,7 @@
 %%%
 -module(yate_encode).
 
--export([encode_command/3]).
+-export([encode_command/3, encode_dict/2]).
 
 -include("yate.hrl").
 
@@ -51,7 +51,7 @@ encode_data({Type, Dir, Headers, Keys}) ->
     {ok, TypeStr} = encode_type(Type),
     {ok, DirStr} = encode_dir(Dir),
     HeaderStr = encode_params(header, Headers),
-    KeyStr = encode_dict(key, Keys),
+    KeyStr = command:encode_keys(Keys),
     Msg = "%%" ++ DirStr ++ TypeStr ++ HeaderStr ++ KeyStr ++ "\n",
     {ok, Msg}.
 
