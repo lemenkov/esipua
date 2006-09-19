@@ -1,6 +1,8 @@
 -module(command).
 
--exports(find_key/1, fetch_key/1).
+-include("yate.hrl").
+
+-export([find_key/2, fetch_key/2]).
 
 find_key(Key, Cmd) ->
     dict:find(Key, Cmd#command.keys).
