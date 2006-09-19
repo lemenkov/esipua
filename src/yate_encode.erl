@@ -5,7 +5,7 @@
 %%%
 -module(yate_encode).
 
--export([encode_command/3, encode_dict/2]).
+-export([encode_command/3, encode_dict/2, encode_list/2]).
 
 -include("yate.hrl").
 
@@ -77,6 +77,13 @@ encode_dict(_Type, undefined) ->
 encode_dict(Type, Dict) ->
     Fun = fun(Key, Value, AccIn) -> encode_dict_item(Key, Value, AccIn) end,
     {Type, Res} = dict:fold(Fun, {Type, []}, Dict),
+    Res.
+
+encode_list(_Type, undefined) ->
+    [];
+encode_list(Type, List) ->
+    Fun = fun(Key, Value, AccIn) -> encode_dict_item(Key, Value, AccIn) end,
+    {Type, Res} = list:foldl(Fun, {Type, []}, List),
     Res.
 
 encode_dict_item(Key, Value, {Type, Res}) ->
