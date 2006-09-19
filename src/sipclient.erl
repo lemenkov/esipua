@@ -278,7 +278,7 @@ execute(State) ->
 	    ignore;
 	true ->
 	    {ok, Auto} = fetch_auto_keys(RetCmd),
-	    Id = dict:fetch(id, RetCmd#command.keys),
+	    Id = command:fetch_key(id, RetCmd),
 	    State1 = State#state{id=Id},
 	    {ok, State2} = setup(State1),
 	    send_auto_response(State2, Auto)
@@ -289,7 +289,7 @@ fetch_auto_keys(Cmd) ->
     Autokeys = [autoanswer, autoringing, autoprogress],
     case fetch_auto_keys(Cmd, Autokeys, []) of
 	{ok, noauto} ->
-	    case dict:find(targetid, Cmd#command.keys) of
+	    case command:find_key(targetid, Cmd) of
 		error ->
 		    {ok, autoanswer};
 		_ ->
@@ -302,7 +302,7 @@ fetch_auto_keys(Cmd) ->
 fetch_auto_keys(_Cmd, [], _Res) ->
     {ok, noauto};
 fetch_auto_keys(Cmd, [Key|R], Res) ->
-    case dict:find(Key, Cmd#command.keys) of
+    case command:find_key(Key, Cmd) of
 	{ok, "true"} ->
 	    {ok, Key};
 	_ ->
@@ -316,29 +316,29 @@ setup(State) ->
     Id = State#state.id,
     ok = yate:watch(Handle, chan.disconnected,
 		    fun(Cmd) ->
-			    Id == dict:fetch(id, Cmd#command.keys)
+			    Id == command:fetch_key(id, Cmd)
 		    end),
     ok = yate:watch(Handle, call.ringing,
 		    fun(Cmd) ->
- 			    Id == dict:fetch(targetid, Cmd#command.keys)
+ 			    Id == command:fetch_key(targetid, Cmd)
 		    end),
 
     ok = yate:watch(Handle, chan.hangup,
 		    fun(Cmd) ->
-			    Id == dict:fetch(id, Cmd#command.keys)
+			    Id == command:fetch_key(id, Cmd)
 		    end),
     ok = yate:watch(Handle, call.progress,
 		    fun(Cmd) ->
-			    Id == dict:fetch(targetid, Cmd#command.keys)
+			    Id == command:fetch_key(targetid, Cmd)
 		    end),
     ok = yate:watch(Handle, call.answered,
 		    fun(Cmd) ->
-			    Id == dict:fetch(targetid, Cmd#command.keys)
+			    Id == command:fetch_key(targetid, Cmd)
 		    end),
     ok = yate:watch(Handle, call.drop,
 		    fun(Cmd) ->
 			    %% Check
-			    Id == dict:fetch(targetid, Cmd#command.keys)
+			    Id == command:fetch(targetid, Cmd)
 		    end),
 
     %% FIXME Contact
@@ -370,7 +370,7 @@ startup(State, Id) ->
 		       {id, Id},
 		       {driver, "erlang"}
 		      ]),
-%%     Peer_id = dict:fetch(peerid, RetCmd#command.keys),
+%%     Peer_id = command:fetch_key(peerid, RetCmd),
 %%     {ok, State#state{peerid=Peer_id}}.
     {ok, State}.
     
@@ -398,15 +398,15 @@ start_rtp(State, Id) ->
 		       {format, "alaw"}
 		      ]),
 
-    case dict:find(localport, RetCmd#command.keys) of
+    case command:find_key(localport, RetCmd) of
 	{ok, Local_port} ->
 	    logger:log(normal, "sipclient: local rtp port ~p", [Local_port]);
 	_ ->
 	    ok
     end,
 
-    Localip = dict:fetch(localip, RetCmd#command.keys),
-    Localport = list_to_integer(dict:fetch(localport, RetCmd#command.keys)),
+    Localip = command:fetch_key(localip, RetCmd),
+    Localport = list_to_integer(command:fetch_key(localport, RetCmd)),
 
     {ok, Body} = create_sdp_body(Localip, Localport),
     {ok, State#state{sdp_body=Body}}.
@@ -601,7 +601,7 @@ handle_command(message, Dir, Cmd, From, State) ->
     handle_message(Name, Dir, Cmd, From, State).
 
 handle_message(chan.hangup, ans, Cmd, _From, State) ->
-    Id = dict:fetch(id, Cmd#command.keys),
+    Id = command:fetch_key(id, Cmd),
     error_logger:info_msg("Call hangup ~p~n", [Id]),
     %% TODO distinguish CANCEL and BYE
     %% Send bye
@@ -610,7 +610,7 @@ handle_message(chan.hangup, ans, Cmd, _From, State) ->
     {ok, Pid, Branch} = send_request(Bye),
     {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
 handle_message(call.answered, ans, Cmd, _From, State) ->
-    Id = dict:fetch(id, Cmd#command.keys),
+    Id = command:fetch_key(id, Cmd),
     error_logger:info_msg("Handle answer ~p~n", [Id]),
     {ok, State1} = send_200ok(State),
     {noreply, State1};
@@ -619,9 +619,9 @@ handle_message(call.ringing, ans, _Cmd, _From, State) ->
     ok = send_response(State, 180, "Ringing"),
     {noreply, State};
 handle_message(chan.disconnected, ans, Cmd, _From, State) ->
-    Id = dict:fetch(id, Cmd#command.keys),
+    Id = command:fetch_key(id, Cmd),
     YReason = 
-	case dict:find(reason, Cmd#command.keys) of
+	case command:find_key(reason, Cmd) of
 	    {ok, YReason1} ->
 		YReason1;
 	    _ ->
