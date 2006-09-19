@@ -73,7 +73,7 @@ init([Host, Port]) ->
     {ok, Conn} = yate_conn_srv:start_link(Host, Port, self()),
     error_logger:info_msg("Connected ~p~n", [?MODULE]),
 %%    link(Conn),
-%%    process_flag(trap_exit, true),
+    process_flag(trap_exit, true),
     {ok, #sstate{conn=Conn}}.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -141,8 +141,13 @@ handle_info({cast, {ans, RetValue, RetCmd}, {send, From}}, State) ->
     gen_server:reply(From, {ok, RetValue, RetCmd}),
     {noreply, State};
 handle_info({'EXIT', Pid, Reason}, State) ->
-    error_logger:info_msg("EXIT ~p ~p ~p~n", [?MODULE, Pid, Reason]),
-    {noreply, State};
+    case uninstall_pid(Pid, State) of
+	{ok, State1} ->
+	    error_logger:info_msg("~p: Client ~p exited ~p~n", [?MODULE, Pid, Reason]),
+	    {noreply, State1};
+	_ ->
+	    exit(Reason)
+    end;
 handle_info(Info, State) ->
     error_logger:error_msg("Unsupported info in ~p: ~p~n", [?MODULE, Info]),
     {noreply, State}.
