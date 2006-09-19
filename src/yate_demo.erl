@@ -103,7 +103,7 @@ handle_cast(stop, State) ->
 handle_info({yate, Dir, Cmd, From}, State) ->
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
 handle_info({cast, {ans, RetValue, RetCmd}, {call, From}}, State) ->
-    Id = dict:fetch(id, RetCmd#command.keys),
+    Id = command:fetch_key(id, RetCmd),
     error_logger:info_msg("Result ~p ~p~n", [RetValue, Id]),
     gen_server:reply(From, RetValue),
     {noreply, State};
@@ -127,11 +127,11 @@ handle_command(message, ans, _Cmd, _From, State) ->
 
 
 handle_message(call.execute, Cmd, From, State) ->
-    Callto = dict:fetch(callto, Cmd#command.keys),
+    Callto = command:fetch_key(callto, Cmd),
     error_logger:info_msg("Handle Call execute ~p.~n", [Callto]),
     handle_call_execute(Callto, Cmd, From, State);
 handle_message(call.route, Cmd, From, State) ->
-    handle_call_route(dict:fetch(called, Cmd#command.keys), Cmd, From, State).
+    handle_call_route(command:fetch_key(called, Cmd), Cmd, From, State).
 
 
 handle_call_execute("erl/" ++ String, Cmd, From, State) ->
