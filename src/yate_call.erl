@@ -5,7 +5,8 @@
 -include("yate.hrl").
 
 %% api
--export([start_link/2, answer/1, drop/2, drop/1, play_wave/3, stop/1]).
+-export([start_link/2, answer/1, drop/2, drop/1, play_wave/3, play_tone/2,
+	 stop/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -43,6 +44,10 @@ drop(Call, Reason) ->
 play_wave(Call, Notify, WaveFile) ->
     error_logger:info_msg("play_wave ~p ~p ~p~n", [?MODULE, self(), Notify]),
     gen_server:call(Call, {play_wave, Notify, WaveFile, self()}).
+
+play_tone(Call, Tone) ->
+    error_logger:info_msg("play_tone ~p ~p ~p~n", [?MODULE, self(), Tone]),
+    gen_server:call(Call, {play_tone, Tone}).
 
 stop(Call) ->
     gen_server:cast(Call, stop).
@@ -116,6 +121,27 @@ handle_call({play_wave, Notify, WaveFile, Pid}, _From, State) ->
 		       {source, ["wave/play/", WaveFile]}
 		      ]),
     {reply, ok, State};
+
+handle_call({play_tone, Tone}, _From, State) ->
+    Id = State#state.id,
+    Handle = State#state.handle,
+    {ok, _RetValue, _RetCmd} =
+	yate:send_msg(Handle, chan.masquerade,
+		      [{message, "chan.attach"},
+		       {id, Id},
+		       {source, "tone/" ++ Tone}]),
+    {reply, ok, State};
+
+%% handle_call({record_wave, Handle, TargetId, Notify, WaveFile, MaxLen) ->
+%%     {ok, _RetValue, _RetCmd} =
+%% 	yate:send_msg(Handle, chan.masquerade,
+%% 		      [{message, "chan.attach"},
+%% 		       {id, TargetId},
+%% 		       {notify, Notify},
+%% 		       {maxlen, MaxLen},
+%% 		       {consumer, ["wave/record/", WaveFile]}
+%% 		      ]),
+%%     ok.
 
 handle_call(Request, _From, State) ->
     error_logger:error_msg("Unhandled call in ~p: ~p~n", [?MODULE, Request]),
