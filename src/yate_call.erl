@@ -6,7 +6,7 @@
 
 %% api
 -export([start_link/2, answer/1, drop/2, drop/1, play_wave/3, play_tone/2,
-	 stop/1]).
+	 ringing/1, stop/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -48,6 +48,9 @@ play_wave(Call, Notify, WaveFile) ->
 play_tone(Call, Tone) ->
     error_logger:info_msg("play_tone ~p ~p ~p~n", [?MODULE, self(), Tone]),
     gen_server:call(Call, {play_tone, Tone}).
+
+ringing(Call) ->
+    gen_server:call(Call, ringing).
 
 stop(Call) ->
     gen_server:cast(Call, stop).
@@ -142,6 +145,21 @@ handle_call({play_tone, Tone}, _From, State) ->
 %% 		       {consumer, ["wave/record/", WaveFile]}
 %% 		      ]),
 %%     ok.
+
+handle_call(ringing, _From, State) ->
+    Id = State#state.id,
+    Peerid = State#state.peerid,
+    Handle = State#state.handle,
+    {ok, _RetValue, _RetCmd} =
+	yate:send_msg(Handle, chan.masquerade,
+		      [
+		       {message, "call.ringing"},
+ 		       {id, Id},
+   		       {targetid, Peerid},
+		       {module, "erlang"}
+		      ]),
+    
+    {reply, ok, State};
 
 handle_call(Request, _From, State) ->
     error_logger:error_msg("Unhandled call in ~p: ~p~n", [?MODULE, Request]),
