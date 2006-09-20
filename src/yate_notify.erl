@@ -39,8 +39,9 @@ stop() ->
 %% gen_server callbacks
 %%
 init([Client, Tag, Pid]) ->
+    link(Pid),
     {ok, Handle} = yate:open(Client),
-    Id = "FIXME",
+    Id = erlang:ref_to_list(make_ref()),
     ok = yate:install(Handle, chan.notify,
 		    fun(Cmd) ->
  			    Id == command:fetch_key(targetid, Cmd)
