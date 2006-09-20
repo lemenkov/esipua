@@ -17,7 +17,7 @@
 %% Debug
 -export([wave_year/1, wave_number/1, wave_tens/1, wave_ones/1]).
 
--record(sstate, {handle, id, peer_id, waves}).
+-record(sstate, {handle, id, peer_id, waves, call}).
 
 -include("yate.hrl").
 
@@ -44,6 +44,8 @@ init([Client, Id, ExecCmd, From, _Args]) ->
     error_logger:info_msg("Waves ~p~n", [Waves]),
     error_logger:info_msg("Init clock ~p~n", [Id]),
 
+    {ok, Call} = yate_call:start_link(Client, ExecCmd),
+
     {ok, Handle} = yate:open(Client),
     ok = yate:watch(Handle, call.execute, 
 		    fun(Cmd) ->
@@ -58,7 +60,7 @@ init([Client, Id, ExecCmd, From, _Args]) ->
 				  ExecCmd),
     yate:ret(From, NewCmd, false),
 
-    {ok, #sstate{handle=Handle, id=Id, waves=Waves}, ?TIMEOUT_WAIT_EXEC}.
+    {ok, #sstate{handle=Handle, id=Id, waves=Waves, call=Call}, ?TIMEOUT_WAIT_EXEC}.
 
 route(timeout, State) ->
     {stop, error, State}.
@@ -72,6 +74,8 @@ handle_call(_Request, _From, _State) ->
 
 handle_info({yate, Dir, Cmd, From}, State) ->
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
+handle_info({yate_call, hangup, From}, State) ->
+    {stop, normal, State};
 handle_info(timeout, State) ->
     handle_timeout(State#sstate.waves, State);
 handle_info(Info, State) ->
@@ -82,8 +86,6 @@ handle_info(Info, State) ->
 terminate(_Reason, State) ->
     Handle = State#sstate.handle,
     yate:unwatch(Handle, call.execute), 
-    yate:unwatch(Handle, chan.hangup),
-    yate:uninstall(Handle, chan.dtmf),
     yate:uninstall(Handle, chan.notify),
     yate:close(Handle),
     terminate.
@@ -101,21 +103,17 @@ handle_message(call.execute, ans, Cmd, _From, State) ->
     Id = command:fetch_key(id, Cmd),
     Peerid = command:fetch_key(peerid, Cmd),
     error_logger:info_msg("Call execute ~p. answer~n", [Peerid]),
-    ok = yate:watch(State#sstate.handle, chan.hangup,
-		    fun(Cmd1) ->
-			    Peerid == command:fetch_key(id, Cmd1)
-		    end),
-    ok = yate:install(State#sstate.handle, chan.dtmf,
-		    fun(Cmd1) ->
-			    Peerid == command:fetch_key(peerid, Cmd1)
-			    %%Peerid == command:fetch_key(targetid, Cmd1)
-		    end),
+%%     ok = yate:install(State#sstate.handle, chan.dtmf,
+%% 		    fun(Cmd1) ->
+%% 			    Peerid == command:fetch_key(peerid, Cmd1)
+%% 			    %%Peerid == command:fetch_key(targetid, Cmd1)
+%% 		    end),
     ok = yate:install(State#sstate.handle, chan.notify,
 		    fun(Cmd1) ->
 			    Id == command:fetch_key(targetid, Cmd1)
 		    end),
 
-    ok = answer(Id, Cmd, State),
+    ok = yate_call:answer(State#sstate.call),
     [Wave_file | R] = State#sstate.waves,
     TargetId = command:fetch_key(targetid, Cmd),
     ok = play_wave(TargetId, State, Wave_file),
@@ -124,16 +122,12 @@ handle_message(chan.notify, req, Cmd, From, State) ->
     Id = command:fetch_key(targetid, Cmd),
     error_logger:info_msg("Notify ~p~n", [Id]),
     yate:ret(From, Cmd, true),
-    handle_notify(State#sstate.waves, State);
-handle_message(chan.hangup, ans, Cmd, _From, State) ->
-    Id = command:fetch_key(id, Cmd),
-    error_logger:info_msg("Call hangup ~p~n", [Id]),
-    {stop, normal, State}.
+    handle_notify(State#sstate.waves, State).
 
 handle_notify([], State) ->
-    ok = drop(State),
+    ok = yate_call:drop(State#sstate.call),
     {stop, normal, State};
-handle_notify([Wave_file | R], State) ->
+handle_notify([_Wave_file | R], State) ->
     {noreply, State, 10}.
 %% handle_notify([Wave_file | R], State) ->
 %%     [Wave_file | R] = State#sstate.waves,
@@ -141,7 +135,7 @@ handle_notify([Wave_file | R], State) ->
 %%     {noreply, State#sstate{waves=R}}.
 
 handle_timeout([], State) ->
-    ok = drop(State),
+    ok = yate_call:drop(State#sstate.call),
     {stop, normal};
 handle_timeout([Wave_file | R], State) ->
     [Wave_file | R] = State#sstate.waves,
@@ -149,42 +143,7 @@ handle_timeout([Wave_file | R], State) ->
     {noreply, State#sstate{waves=R}}.
 
 play_wave(TargetId, State, Wave_file) ->
-    play_wave(State#sstate.handle, TargetId, State#sstate.id,
-	      Wave_file).
-
-play_wave(Handle, TargetId, Notify, WaveFile) ->
-    {ok, _RetValue, _RetCmd} =
-	yate:send_msg(Handle, chan.masquerade,
-		      [{message, "chan.attach"},
-		       {id, TargetId},
-		       {notify, Notify},
-		       {source, ["wave/play/", WaveFile]}
-		      ]),
-    ok.
-
-answer(Id, Cmd, State) ->
-    Handle = State#sstate.handle,
-    {ok, _RetValue, _RetCmd} =
-	yate:send_msg(Handle, chan.masquerade,
-		      [
-		       {message, call.answered},
-		       {id, command:fetch_key(targetid, Cmd)},
- 		       {targetid, Id},
-		       {module, "erlang"}
-		      ]),
-    ok.
-
-drop(State) ->
-    Handle = State#sstate.handle,
-    {ok, _RetValue, _RetCmd} =
-	yate:send_msg(Handle, chan.masquerade,
-		      [
-		       {message, "call.drop"},
-		       {id, State#sstate.peer_id},
-		       {reason, "hangup"},
-		       {module, "erlang"}
-		      ]),
-    ok.
+    yate_call:play_wave(State#sstate.call, State#sstate.id, Wave_file).
 
 wave_month(Month) ->
     [["/var/local/tmp/cvs/asterisk.net/sounds/digits/mon-",
