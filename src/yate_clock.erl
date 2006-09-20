@@ -69,15 +69,18 @@ handle_call(_Request, _From, _State) ->
     exit(unhandled_call).
 
 
-handle_info({yate_call, execute, _From}, State) ->
+handle_info(answer, State) ->
     ok = yate_call:answer(State#sstate.call),
-    [Wave_file | R] = State#sstate.waves,
-    ok = play_wave(State, Wave_file),
-    {noreply, State#sstate{waves=R}};
+    {noreply, State, 20};
+
+handle_info({yate_call, execute, _From}, State) ->
+    ok = yate_call:ringing(State#sstate.call),
+    timer:send_after(1000, answer),
+    {noreply, State};
 handle_info({yate_call, hangup, _From}, State) ->
     {stop, normal, State};
 handle_info({yate_call, disconnected, _From}, State) ->
-    {stop, normal, State};
+    {noreply, State};
 handle_info({yate_notify, Tag}, State=#sstate{id=Tag}) ->
     handle_notify(State#sstate.waves, State);
 handle_info(timeout, State) ->
@@ -98,17 +101,13 @@ code_change(_OldVsn, State, _Extra)  ->
 
 handle_notify([], State) ->
     ok = yate_call:drop(State#sstate.call),
-    {stop, normal, State};
+    {noreply, State};
 handle_notify([_Wave_file | _R], State) ->
     {noreply, State, 10}.
-%% handle_notify([Wave_file | R], State) ->
-%%     [Wave_file | R] = State#sstate.waves,
-%%     ok = play_wave(State, Wave_file),
-%%     {noreply, State#sstate{waves=R}}.
 
 handle_timeout([], State) ->
     ok = yate_call:drop(State#sstate.call),
-    {stop, normal};
+    {stop, normal, State};
 handle_timeout([Wave_file | R], State) ->
     [Wave_file | R] = State#sstate.waves,
     ok = play_wave(State, Wave_file),
