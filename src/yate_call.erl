@@ -163,6 +163,8 @@ handle_message(call.execute, ans, Cmd, _From, State) ->
     Peerid = command:fetch_key(peerid, Cmd),
     State1 = State#state{id=Peerid},
     ok = setup_watches(State1),
+    Parent = State#state.parent,
+    Parent ! {yate_call, execute, self()},
     {noreply, State1};
 handle_message(chan.disconnected, ans, _Cmd, _From, State) ->
     Parent = State#state.parent,

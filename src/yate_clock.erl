@@ -17,7 +17,7 @@
 %% Debug
 -export([wave_year/1, wave_number/1, wave_tens/1, wave_ones/1]).
 
--record(sstate, {handle, id, peer_id, waves, call}).
+-record(sstate, {handle, id, waves, call}).
 
 -include("yate.hrl").
 
@@ -45,13 +45,7 @@ init([Client, Id, ExecCmd, From, _Args]) ->
     error_logger:info_msg("Init clock ~p~n", [Id]),
 
     {ok, Call} = yate_call:start_link(Client, ExecCmd),
-
     {ok, Handle} = yate:open(Client),
-    ok = yate:watch(Handle, call.execute, 
-		    fun(Cmd) ->
-			    CmdId = command:fetch_key(id, Cmd),
-			    Id == CmdId
-		    end),
 
     NewCmd = command:append_keys([
 				   {callto, "dumb/"},
@@ -72,8 +66,11 @@ handle_call(_Request, _From, _State) ->
     exit(unhandled_call).
 
 
-handle_info({yate, Dir, Cmd, From}, State) ->
-    handle_command(Cmd#command.type, Dir, Cmd, From, State);
+handle_info({yate_call, execute, _From}, State) ->
+    ok = yate_call:answer(State#sstate.call),
+    [Wave_file | R] = State#sstate.waves,
+    ok = play_wave(State, Wave_file),
+    {noreply, State#sstate{waves=R}};
 handle_info({yate_call, hangup, _From}, State) ->
     {stop, normal, State};
 handle_info({yate_call, disconnected, _From}, State) ->
@@ -89,33 +86,12 @@ handle_info(Info, State) ->
 
 terminate(_Reason, State) ->
     Handle = State#sstate.handle,
-    yate:unwatch(Handle, call.execute), 
     yate:close(Handle),
     terminate.
 
 code_change(_OldVsn, State, _Extra)  ->
     {ok, State}.
 
-
-handle_command(message, Dir, Cmd, From, State) ->
-    Name = (Cmd#command.header)#message.name,
-    handle_message(Name, Dir, Cmd, From, State).
-
-
-handle_message(call.execute, ans, Cmd, _From, State) ->
-%%     Id = command:fetch_key(id, Cmd),
-    Peerid = command:fetch_key(peerid, Cmd),
-    error_logger:info_msg("Call execute ~p. answer~n", [Peerid]),
-%%     ok = yate:install(State#sstate.handle, chan.dtmf,
-%% 		    fun(Cmd1) ->
-%% 			    Peerid == command:fetch_key(peerid, Cmd1)
-%% 			    %%Peerid == command:fetch_key(targetid, Cmd1)
-%% 		    end),
-
-    ok = yate_call:answer(State#sstate.call),
-    [Wave_file | R] = State#sstate.waves,
-    ok = play_wave(State, Wave_file),
-    {noreply, State#sstate{peer_id=Peerid,waves=R}}.
 
 handle_notify([], State) ->
     ok = yate_call:drop(State#sstate.call),
