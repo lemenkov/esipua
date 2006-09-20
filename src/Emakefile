@@ -6,5 +6,6 @@
   "yate_call",
   "command",
   "key_dict",
-  "key_list"
+  "key_list",
+  "yate_notify"
 ], [load, {i, "../include"}, {i, "/usr/lib/yxa/include"}, debug_info]}.

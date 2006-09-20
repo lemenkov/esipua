@@ -38,7 +38,8 @@ drop(Call, Reason) ->
     gen_server:call(Call, {drop, Reason}).
 
 play_wave(Call, Notify, WaveFile) ->
-    gen_server:call(Call, {play_wave, Notify, WaveFile}).
+    error_logger:info_msg("play_wave ~p ~p ~p~n", [?MODULE, self(), Notify]),
+    gen_server:call(Call, {play_wave, Notify, WaveFile, self()}).
 
 stop(Call) ->
     gen_server:cast(Call, stop).
@@ -109,14 +110,16 @@ handle_call({drop, Reason}, _From, State) ->
 		      ]),
     {reply, ok, State};
 
-handle_call({play_wave, Notify, WaveFile}, _From, State) ->
+handle_call({play_wave, Notify, WaveFile, Pid}, _From, State) ->
     Id = State#state.id,
     Handle = State#state.handle,
+    {ok, NotifyPid} = yate_notify:start_link(State#state.client, Notify, Pid),
+    {ok, NotifyId} = yate_notify:get_id(NotifyPid),
     {ok, _RetValue, _RetCmd} =
 	yate:send_msg(Handle, chan.masquerade,
 		      [{message, "chan.attach"},
 		       {id, Id},
-		       {notify, Notify},
+		       {notify, NotifyId},
 		       {source, ["wave/play/", WaveFile]}
 		      ]),
     {reply, ok, State};
