@@ -165,6 +165,8 @@ handle_message(call.execute, ans, Cmd, _From, State) ->
     ok = setup_watches(State1),
     {noreply, State1};
 handle_message(chan.disconnected, ans, _Cmd, _From, State) ->
+    Parent = State#state.parent,
+    Parent ! {yate_call, disconnected, self()},
     {noreply, State};
 handle_message(chan.hangup, ans, _Cmd, _From, State) ->
     Parent = State#state.parent,

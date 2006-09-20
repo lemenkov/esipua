@@ -39,7 +39,7 @@ start_link(Client, Id, Cmd, From, Args) ->
 %% gen_server
 init([Client, Id, ExecCmd, From, _Args]) ->
     error_logger:info_msg("yate_clock start_link ~p~n", [self()]),
-    {{Year, Month, Day}, {Hour, Min, Secs}} = erlang:localtime(),
+    {{Year, Month, Day}, {_Hour, _Min, _Secs}} = erlang:localtime(),
     Waves = wave_month(Month) ++ wave_day(Day) ++ wave_year(Year),
     error_logger:info_msg("Waves ~p~n", [Waves]),
     error_logger:info_msg("Init clock ~p~n", [Id]),
@@ -74,7 +74,9 @@ handle_call(_Request, _From, _State) ->
 
 handle_info({yate, Dir, Cmd, From}, State) ->
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
-handle_info({yate_call, hangup, From}, State) ->
+handle_info({yate_call, hangup, _From}, State) ->
+    {stop, normal, State};
+handle_info({yate_call, disconnected, _From}, State) ->
     {stop, normal, State};
 handle_info({yate_notify, Tag}, State=#sstate{id=Tag}) ->
     handle_notify(State#sstate.waves, State);
@@ -101,7 +103,7 @@ handle_command(message, Dir, Cmd, From, State) ->
 
 
 handle_message(call.execute, ans, Cmd, _From, State) ->
-    Id = command:fetch_key(id, Cmd),
+%%     Id = command:fetch_key(id, Cmd),
     Peerid = command:fetch_key(peerid, Cmd),
     error_logger:info_msg("Call execute ~p. answer~n", [Peerid]),
 %%     ok = yate:install(State#sstate.handle, chan.dtmf,
@@ -112,18 +114,17 @@ handle_message(call.execute, ans, Cmd, _From, State) ->
 
     ok = yate_call:answer(State#sstate.call),
     [Wave_file | R] = State#sstate.waves,
-    TargetId = command:fetch_key(targetid, Cmd),
-    ok = play_wave(TargetId, State, Wave_file),
+    ok = play_wave(State, Wave_file),
     {noreply, State#sstate{peer_id=Peerid,waves=R}}.
 
 handle_notify([], State) ->
     ok = yate_call:drop(State#sstate.call),
     {stop, normal, State};
-handle_notify([_Wave_file | R], State) ->
+handle_notify([_Wave_file | _R], State) ->
     {noreply, State, 10}.
 %% handle_notify([Wave_file | R], State) ->
 %%     [Wave_file | R] = State#sstate.waves,
-%%     ok = play_wave(State#sstate.peer_id, State, Wave_file),
+%%     ok = play_wave(State, Wave_file),
 %%     {noreply, State#sstate{waves=R}}.
 
 handle_timeout([], State) ->
@@ -131,10 +132,10 @@ handle_timeout([], State) ->
     {stop, normal};
 handle_timeout([Wave_file | R], State) ->
     [Wave_file | R] = State#sstate.waves,
-    ok = play_wave(State#sstate.peer_id, State, Wave_file),
+    ok = play_wave(State, Wave_file),
     {noreply, State#sstate{waves=R}}.
 
-play_wave(TargetId, State, Wave_file) ->
+play_wave(State, Wave_file) ->
     yate_call:play_wave(State#sstate.call, State#sstate.id, Wave_file).
 
 wave_month(Month) ->
