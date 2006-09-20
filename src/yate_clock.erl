@@ -25,7 +25,10 @@
 
 start(Client, Cmd, From, Args) ->
     Id = command:fetch_key(id, Cmd),
-    start_link(Client, Id, Cmd, From, Args).
+    start(Client, Id, Cmd, From, Args).
+
+start(Client, Id, Cmd, From, Args) ->
+    gen_server:start(yate_clock, [Client, Id, Cmd, From, Args], []).
 
 %%--------------------------------------------------------------------
 %% @spec start_link() -> Result
