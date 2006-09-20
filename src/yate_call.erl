@@ -25,7 +25,10 @@
 	 }).
 
 start_link(Client, Cmd) ->
-    {ok, Pid} = gen_server:start_link(?MODULE, [Client, Cmd, self()], []),
+    %% Can't use gen_server:start_link, since we need to trap exit
+    %% from our parent.
+    {ok, Pid} = gen_server:start(?MODULE, [Client, Cmd, self()], []),
+    link(Pid),
     {ok, Pid}.
 
 answer(Call) ->
@@ -48,6 +51,7 @@ stop(Call) ->
 %% gen_server callbacks
 %%
 init([Client, Cmd, Parent]) ->
+    process_flag(trap_exit, true),
     {ok, Handle} = yate:open(Client),
     Status =
 	case command:find_key(status, Cmd) of
@@ -61,8 +65,6 @@ init([Client, Cmd, Parent]) ->
 
     State0 = #state{client=Client,parent=Parent,handle=Handle},
     State = setup(Status, Cmd, State0),
-    Id = State#state.id,
-    error_logger:info_msg("~p: call ~p ~p~n", [?MODULE, Id, Status]),
     {ok, State}.
 
 setup(incoming, Cmd, State) ->
@@ -98,16 +100,7 @@ handle_call(answer, _From, State) ->
     {reply, ok, State};
 
 handle_call({drop, Reason}, _From, State) ->
-    Id = State#state.id,
-    Handle = State#state.handle,
-    {ok, _RetValue, _RetCmd} =
-	yate:send_msg(Handle, chan.masquerade,
-		      [
-		       {message, "call.drop"},
-		       {id, Id},
-		       {reason, Reason},
-		       {module, "erlang"}
-		      ]),
+    {ok, State} = handle_drop(Reason, State),
     {reply, ok, State};
 
 handle_call({play_wave, Notify, WaveFile, Pid}, _From, State) ->
@@ -139,7 +132,9 @@ handle_cast(Request, State) ->
 handle_info({yate, Dir, Cmd, From}, State) ->
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
 handle_info({'EXIT', Pid, Reason}, State=#state{parent=Pid}) ->
-    {stop, Reason, State};
+    error_logger:error_msg("Do drop ~p ~p~n", [?MODULE, Reason]),
+    {ok, State1} = handle_drop("Error", State),
+    {noreply, State1};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
@@ -174,6 +169,20 @@ handle_message(chan.hangup, ans, _Cmd, _From, State) ->
     Parent = State#state.parent,
     Parent ! {yate_call, hangup, self()},
     {stop, normal, State}.
+
+
+handle_drop(Reason, State) ->
+    Id = State#state.id,
+    Handle = State#state.handle,
+    {ok, _RetValue, _RetCmd} =
+	yate:send_msg(Handle, chan.masquerade,
+		      [
+		       {message, "call.drop"},
+		       {id, Id},
+		       {reason, Reason},
+		       {module, "erlang"}
+		      ]),
+    {ok, State}.
 
 
 setup_watches(State) ->
