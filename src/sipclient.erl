@@ -188,19 +188,12 @@ start_generate_request(Method, From, To, ExtraHeaders, Body) ->
 start_link(Client, Request, LogStr) ->
     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
     THandler = transactionlayer:get_handler_for_request(Request),
-    case  gen_server:start_link(?MODULE, [Client, Request, LogStr], []) of
-	{ok, Pid} ->
-	    ok = adopt_transaction(THandler, Pid),
-	    {ok, Pid};
-	{error, _Reason} ->
-	    error;
-	ignore ->
-	    ignore
-    end.
+    gen_server:start_link(?MODULE, [Client, Request, LogStr, self()], []).
 
 adopt_transaction(THandler, Pid) ->
-    STPid = transactionlayer:get_pid_from_handler(THandler),
-    ok = gen_server:call(STPid, {change_parent, self(), Pid}),
+    logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
+    ok = transactionlayer:change_transaction_parent(THandler, self(), Pid),
+    logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
     ok.
 
 %%
@@ -217,21 +210,22 @@ stop() ->
 %%
 %% gen_server callbacks
 %%
-init([Client, Request, LogStr]) ->
+init([Client, Request, LogStr, OldPid]) ->
     case transactionlayer:adopt_st_and_get_branchbase(Request) of
 	ignore ->
 	    {stop, {error, ignore}};
 	error ->
 	    {stop, error};
 	BranchBase ->
-	    init2(Client, Request, LogStr, BranchBase)
+	    init2(Client, Request, LogStr, BranchBase, OldPid)
     end.
 
-init2(Client, Request, LogStr, _BranchBase) ->
+init2(Client, Request, LogStr, _BranchBase, OldPid) ->
     {ok, Handle} = yate:open(Client),
     logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
     {ok, Address, Port} = parse_sdp(Request),
     THandler = transactionlayer:get_handler_for_request(Request),
+    ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
     Invite_pid = transactionlayer:get_pid_from_handler(THandler),
     State = #state{invite=Request, invite_pid=Invite_pid,
 		   handle=Handle, address=Address, port=Port},
