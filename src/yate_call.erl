@@ -167,6 +167,7 @@ handle_call(Request, _From, State) ->
 
 
 handle_cast(stop, State) ->
+    error_logger:error_msg("~p:stop received ~p~n", [?MODULE, self()]),
     {stop, normal, State};
 handle_cast(Request, State) ->
     error_logger:error_msg("Unhandled cast in ~p: ~p~n", [?MODULE, Request]),
@@ -179,7 +180,11 @@ handle_info({'EXIT', Pid, Reason}, State=#state{parent=Pid}) ->
     error_logger:error_msg("Do drop ~p ~p~n", [?MODULE, Reason]),
     {ok, State1} = handle_drop("Error", State),
     {noreply, State1};
+handle_info({'EXIT', _Pid, normal}, State) ->
+    %% Ignore normal exit
+    {noreply, State};
 handle_info({'EXIT', _Pid, Reason}, State) ->
+    error_logger:error_msg("~p:EXIT received ~p~n", [?MODULE, self()]),
     {stop, Reason, State};
 
 handle_info(Info, State) ->
@@ -212,6 +217,7 @@ handle_message(chan.disconnected, ans, _Cmd, _From, State) ->
 handle_message(chan.hangup, ans, _Cmd, _From, State) ->
     Parent = State#state.parent,
     Parent ! {yate_call, hangup, self()},
+    error_logger:error_msg("~p:hangup received ~p~n", [?MODULE, self()]),
     {stop, normal, State}.
 
 
