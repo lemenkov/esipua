@@ -2,6 +2,14 @@
 %% Based on sipclient.erl from Yxa
 %%
 
+%%
+%% States:
+%% incoming - Incoming calls 
+%% outgoing - Outgoing calls
+%% up       - Call up
+%% bye_sent - SIP BYE sent
+%%
+
 -module(sipclient).
 
 -behaviour(gen_fsm).
@@ -440,25 +448,25 @@ handle_event(Request, StateName, State) ->
     error_logger:error_msg("Unhandled cast in ~p: ~p~n", [?MODULE, Request]),
     {next_state, StateName, State}.
 
-handle_info({yate_call, dialog, Call}, StateName=incoming, State=#state{call=Call}) ->
+handle_info({yate_call, dialog, Call}, incoming=StateName, State=#state{call=Call}) ->
     ok = send_response(State, 101, "Dialog Establishment"),
     {next_state, StateName, State};
 
-handle_info({yate_call, ringing, Call}, StateName=incoming, State=#state{call=Call}) ->
+handle_info({yate_call, ringing, Call}, incoming=StateName, State=#state{call=Call}) ->
     %% FIXME send sdp if earlymedia=true
     ok = send_response(State, 180, "Ringing"),
     {next_state, StateName, State};
 
-handle_info({yate_call, progress, Call}, StateName=incoming, State=#state{call=Call}) ->
+handle_info({yate_call, progress, Call}, incoming=StateName, State=#state{call=Call}) ->
     {ok, State1, Body} = get_sdp_body(State),
     ok = send_response(State1, 183, "Session Progress", [], Body),
     {next_state, StateName, State1};
 
-handle_info({yate_call, answered, Call}, StateName=incoming, State=#state{call=Call}) ->
+handle_info({yate_call, answered, Call}, incoming=StateName, State=#state{call=Call}) ->
     error_logger:info_msg("~p: autoanswer ~n", [?MODULE]),
 %%     ok = yate_call:answer(Call),
     {ok, State1} = send_200ok(State),
-    {next_state, StateName, State1};
+    {next_state, up, State1};
 
 handle_info({yate_call, disconnected, Cmd, Call}, incoming=_StateName, State=#state{call=Call}) ->
     YReason =
@@ -536,6 +544,12 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
     Call = State#state.call,
     if
+	%% TODO Handle all 101 <= Status <= 199
+	BranchState == proceeding, Status == 180 ->
+	    %% TODO Update dialog
+	    logger:log(normal, "Ringing: ~p ~p", [BranchState, Status]),
+	    ok = yate_call:ringing(Call),
+            {next_state, StateName, State};
         BranchState == terminated, Status >= 200, Status =< 299 ->
 	    logger:log(normal, "Answered dialog: ~p ~p", [BranchState, Status]),
  	    Request = State#state.invite,
@@ -556,19 +570,17 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
 	    ok = yate_call:drop(Call),
             {stop, normal, State};
-	BranchState == proceeding, Status == 180 ->
-	    logger:log(normal, "Ringing: ~p ~p", [BranchState, Status]),
-	    ok = yate_call:ringing(Call),
-            {next_state, StateName, State};
         true ->
             logger:log(normal, "IGNORING response '~p ~p ~s' to my invite",
 		       [BranchState, Status, Response#response.reason]),
             {next_state, StateName, State}
     end;
+
 handle_info({new_response, #response{status=Status}=Response, Origin, _LogStr}, StateName, State) when is_record(Origin, siporigin) ->
     logger:log(normal, "200OK retransmitt received '~p ~s' to my invite",
 	       [Status, Response#response.reason]),
     {next_state, StateName, State};
+
 handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, incoming=StateName, State) ->
     %% Don't answer ACK
     %% TODO update dialog timeout?
