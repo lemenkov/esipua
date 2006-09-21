@@ -19,8 +19,9 @@
 	 terminate/3]).
 
 -record(state, {dialog,				% SIP Dialog
-		invite,				% Original INVITE request
-		invite_pid,			% Original INVITE pid
+		invite,				% In/out INVITE request
+		invite_pid,			% In/out INVITE pid
+		invite_branch,			% Outgoing INVITE branch
 		bye_branch,			% BYE branch id
 		bye_pid,			% BYE pid
 		client,				% Yate client
@@ -100,16 +101,8 @@ test() ->
                                list_to_binary(SDP)
                               ),
 
-    URL = Request#request.uri,
-    case sipdst:url_to_dstlist(URL, 500, URL) of
-        [Dst | _] ->
-            BranchBase = siprequest:generate_branch(),
-            BranchSeq = 1,
-            Branch = lists:concat([BranchBase, "-UAC-", BranchSeq]),
-	    _LogFun = undefined,
-	    Timeout = ?DEFAULT_TIMEOUT,
-	    _Pid = transactionlayer:start_client_transaction(Request, Dst, Branch, Timeout, self())
-    end,
+    {ok, _Pid, _Branch} = send_request(Request),
+
     %%ok = sipdialog:register_dialog_controller(CallId, FromTag, self()),
     ok.
 
@@ -183,7 +176,6 @@ start_generate_request(Method, From, To, ExtraHeaders, Body) ->
     Header = keylist:from_list([{"From",	[contact:print(FromContact)]},
 				{"To",		[contact:print(To)]},
 				{"Call-Id",	[CallId]},
-				{"CSeq",	[CSeq ++ " " ++ Method]},
 				{"CSeq",	[lists:concat([CSeq, " ", Method])]}
 			       ] ++ ExtraHeaders),
 
@@ -228,7 +220,7 @@ init([Client, Request, LogStr, OldPid]) ->
 	    init2(Client, Request, LogStr, BranchBase, OldPid)
     end;
 
-init([Client, _Id, Cmd, From, [_SipUri]]) ->
+init([Client, _Id, Cmd, From, [SipUri]]) ->
     {ok, Call} = yate_call:start_link(Client, Cmd),
     {ok, Handle} = yate:open(Client),
 
@@ -239,7 +231,46 @@ init([Client, _Id, Cmd, From, [_SipUri]]) ->
 				 Cmd),
     yate:ret(From, NewCmd, false),
 
-    State = #state{client=Client,handle=Handle,call=Call},
+    Caller = case command:find_key(caller, Cmd) of
+		 {ok, Caller1} ->
+		     Caller1;
+		 error ->
+		     "anonymous"
+	     end,
+    CallerName = case command:find_key(callername, Cmd) of
+		     {ok, CallerName1} ->
+			 CallerName1;
+		     error ->
+			 none
+		 end,
+
+    CallerUri = "sip:" ++ Caller ++ "@192.168.0.7:5080",
+
+    FromHdr = #contact{display_name = CallerName,
+		       urlstr = CallerUri,
+		       contact_param = contact_param:to_norm([])
+		      },
+    ToHdr = #contact{display_name = none,
+		     urlstr = SipUri,
+		     contact_param = contact_param:to_norm([])
+		    },
+    Method = "INVITE",
+    SDP = [],
+    Contact = CallerUri,
+    {ok, Request, _CallId, _FromTag} =
+	start_generate_request(Method,
+                               FromHdr,
+                               ToHdr,
+                               [{"Contact", [Contact]},
+                                {"Content-Type", ["application/sdp"]}
+                               ],
+                               list_to_binary(SDP)
+                              ),
+
+    {ok, Pid, Branch} = send_request(Request),
+
+    State = #state{client=Client,handle=Handle,call=Call,contact=Contact,
+		   invite=Request,invite_pid=Pid,invite_branch=Branch},
     {ok, outgoing, State}.
 
 init2(Client, Request, LogStr, _BranchBase, OldPid) ->
@@ -438,6 +469,13 @@ handle_info({yate_call, disconnected, StateName=incoming, Call}, incoming=StateN
     ok = send_response(State#state.invite, Status, Reason),
     {next_state, StateName, State};
 
+handle_info({yate_call, hangup, Call}, outgoing=_StateName, State=#state{call=Call}) ->
+    %% TODO cancel INVITE
+    Invite_pid = State#state.invite_pid,
+    ExtraHeaders = [],
+    Invite_pid ! {cancel, "hangup", ExtraHeaders},
+    {stop, normal, State};
+
 handle_info({yate_call, hangup, Call}, StateName=incoming, State=#state{call=Call}) ->
     error_logger:info_msg("Call hangup ~p~n", [Call]),
     %% TODO distinguish CANCEL and BYE
@@ -473,6 +511,26 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
             {stop, normal, State};
         true ->
             logger:log(normal, "IGNORING response '~p ~p ~s' to my BYE",
+		       [BranchState, Status, Response#response.reason]),
+            {next_state, StateName, State}
+    end;
+handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, StateName, #state{invite_pid = Pid, invite_branch = Branch} = State) ->
+    logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
+    Call = State#state.call,
+    if
+        BranchState == completed, Status >= 200, Status =< 299 ->
+	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
+	    {next_state, StateName, State};
+	BranchState == completed, Status >= 300, Status =< 699 ->
+	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
+	    ok = yate_call:drop(Call),
+            {stop, normal, State};
+	Status == 180 ->
+	    logger:log(normal, "Ringing: ~p ~p", [BranchState, Status]),
+	    ok = yate_call:ringing(Call),
+            {stop, normal, State};
+        true ->
+            logger:log(normal, "IGNORING response '~p ~p ~s' to my invite",
 		       [BranchState, Status, Response#response.reason]),
             {next_state, StateName, State}
     end;
