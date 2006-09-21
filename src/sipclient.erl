@@ -581,7 +581,7 @@ handle_info({new_response, #response{status=Status}=Response, Origin, _LogStr}, 
 	       [Status, Response#response.reason]),
     {next_state, StateName, State};
 
-handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, incoming=StateName, State) ->
+handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, StateName, State) ->
     %% Don't answer ACK
     %% TODO update dialog timeout?
     %% FIXME stop retransmission of 200 Ok
