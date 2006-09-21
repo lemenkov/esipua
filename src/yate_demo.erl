@@ -156,6 +156,9 @@ handle_call_route("mikael", Cmd, From, State) ->
     error_logger:info_msg("Route mikael~n"),
     yate:ret(From, Cmd, true, "sip/sip:1002@mulder"),
     {noreply, State};
+handle_call_route("dial", Cmd, From, State) ->
+    yate:ret(From, Cmd, true, "sip/sip:99991001@192.168.0.7:5080"),
+    {noreply, State};
 handle_call_route(Called, Cmd, From, State) ->
     yate:ret(From, Cmd, false),
     error_logger:error_msg("Unhandled call.route to: ~p~n", [Called]),
