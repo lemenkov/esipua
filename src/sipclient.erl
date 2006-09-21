@@ -22,6 +22,7 @@
 		invite,				% In/out INVITE request
 		invite_pid,			% In/out INVITE pid
 		invite_branch,			% Outgoing INVITE branch
+		invite_cseqno,			% Outgoing cseq
 		bye_branch,			% BYE branch id
 		bye_pid,			% BYE pid
 		client,				% Yate client
@@ -68,8 +69,18 @@ request(_Request, _Origin, LogStr) ->
 response(Response, Origin, LogStr) when is_record(Response, response), is_record
 (Origin, siporigin) ->        
     {Status, Reason} = {Response#response.status, Response#response.reason},
-        logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction - dropping",
-		   [LogStr, Status, Reason]),
+    if
+	Status >= 200, Status =< 299 ->
+	    case sipdialog:get_dialog_controller(Response) of
+		{ok, Dc_pid} ->
+		    logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction, matching dialog ~p - dropping", [LogStr, Status, Reason, Dc_pid]);
+		_ ->
+		    logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction, no matching dialog - dropping", [LogStr, Status, Reason])
+	    end;
+	true ->
+            logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction - dropping",
+		   [LogStr, Status, Reason])
+    end,
     ok.
 
 %%
@@ -117,25 +128,29 @@ test() ->
 %%           is always created, even though it is not always sent).
 %% Returns : {ok, Request, NewDialog}
 %%--------------------------------------------------------------------
+
 generate_new_request(Method, Dialog, Contact) ->
+    {ok, CSeqNum, Dialog1} = sipdialog:get_next_local_cseq(Dialog),
+    generate_new_request(Method, Dialog1, Contact, CSeqNum).
+
+generate_new_request(Method, Dialog, Contact, CSeqNum) ->
     %% Figure out a bunch of parameters in ways that vary depending on if we have
-    {ok, CSeqNum, NewDialog} = sipdialog:get_next_local_cseq(Dialog),
-    [C] = contact:parse([NewDialog#dialog.remote_target]),
-    Route = case NewDialog#dialog.route_set of
+    [C] = contact:parse([Dialog#dialog.remote_target]),
+    Route = case Dialog#dialog.route_set of
 		[] ->
 		    [];
 		Route1 ->
 		    [{"Route", Route1}]
 	    end,
-    To = contact:new(none, NewDialog#dialog.remote_uri,
-		[{"tag", NewDialog#dialog.remote_tag}]),
+    To = contact:new(none, Dialog#dialog.remote_uri,
+		[{"tag", Dialog#dialog.remote_tag}]),
     logger:log(normal, "Remote URI: ~p", [To]),
     TargetURI = sipurl:parse(C#contact.urlstr),
-    From = contact:new(none, NewDialog#dialog.local_uri,
-			      [{"tag", NewDialog#dialog.local_tag}]),
+    From = contact:new(none, Dialog#dialog.local_uri,
+			      [{"tag", Dialog#dialog.local_tag}]),
     Header = keylist:from_list([{"From",        [contact:print(From)]},
 				{"To",          [contact:print(To)]},
-                                {"Call-Id",     [NewDialog#dialog.callid]},
+                                {"Call-Id",     [Dialog#dialog.callid]},
                                 {"CSeq",        [lists:concat([CSeqNum, " ", Method])]},
 				{"Contact",     [Contact]}
                                |Route]),
@@ -144,7 +159,7 @@ generate_new_request(Method, Dialog, Contact) ->
                         header = Header
                        },
     Request = siprequest:set_request_body(Request1, <<>>),
-    {ok, Request, NewDialog}.
+    {ok, Request, Dialog}.
 
 
 
@@ -158,7 +173,7 @@ generate_new_request(Method, Dialog, Contact) ->
 %%           Body         = binary(), request body
 %% Descrip.: Part of the startup functions. Build our initial request
 %%           record.
-%% Returns : {ok, Request, CallId, FromTag}
+%% Returns : {ok, Request, CallId, FromTag, CSeqNo}
 %%           Request = request record()
 %%           CallId  = string(), Call-Id of generated request
 %%           FromTag = string(), From-tag of generated request
@@ -183,7 +198,7 @@ start_generate_request(Method, From, To, ExtraHeaders, Body) ->
     Request1 = #request{method = Method, uri = URI, header = Header},
     Request = siprequest:set_request_body(Request1, Body),
 
-    {ok, Request, CallId, FromTag}.
+    {ok, Request, CallId, FromTag, CSeq}.
 
 
 
@@ -194,6 +209,7 @@ start_link(Client, Request, LogStr) ->
 
 
 start_link(Client, Id, Cmd, From, Args) ->
+    logger:log(normal, "sipclient: start_link ~p~n", [self()]),
     gen_fsm:start_link(?MODULE, [Client, Id, Cmd, From, Args], []).
 
 
@@ -255,22 +271,27 @@ init([Client, _Id, Cmd, From, [SipUri]]) ->
 		     contact_param = contact_param:to_norm([])
 		    },
     Method = "INVITE",
-    SDP = [],
+
+    Localip = "192.168.0.7",
+    Localport = 12345,
+    {ok, Body} = create_sdp_body(Localip, Localport),
+
     Contact = CallerUri,
-    {ok, Request, _CallId, _FromTag} =
+    {ok, Request, _CallId, _FromTag, CSeqNo} =
 	start_generate_request(Method,
                                FromHdr,
                                ToHdr,
                                [{"Contact", [Contact]},
                                 {"Content-Type", ["application/sdp"]}
                                ],
-                               list_to_binary(SDP)
+			       Body
                               ),
 
     {ok, Pid, Branch} = send_request(Request),
 
     State = #state{client=Client,handle=Handle,call=Call,contact=Contact,
-		   invite=Request,invite_pid=Pid,invite_branch=Branch},
+		   invite=Request,invite_pid=Pid,invite_branch=Branch,
+		   sdp_body=Body, invite_cseqno=CSeqNo},
     {ok, outgoing, State}.
 
 init2(Client, Request, LogStr, _BranchBase, OldPid) ->
@@ -439,7 +460,7 @@ handle_info({yate_call, answered, Call}, StateName=incoming, State=#state{call=C
     {ok, State1} = send_200ok(State),
     {next_state, StateName, State1};
 
-handle_info({yate_call, disconnected, StateName=incoming, Call}, incoming=StateName, State=#state{call=Call}) ->
+handle_info({yate_call, disconnected, Call}, incoming=_StateName, State=#state{call=Call}) ->
     YReason = "Unknown",
 %% 	case command:find_key(reason, Cmd) of
 %% 	    {ok, YReason1} ->
@@ -447,7 +468,7 @@ handle_info({yate_call, disconnected, StateName=incoming, Call}, incoming=StateN
 %% 	    _ ->
 %% 		none
 %% 	end,
-    error_logger:info_msg("Call disconnect ~p~n", [YReason]),
+    error_logger:info_msg("~p: Call disconnect ~p~n", [?MODULE, YReason]),
     %% TODO distinguish CANCEL and BYE
     %% Send bye
 %%     {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
@@ -467,26 +488,29 @@ handle_info({yate_call, disconnected, StateName=incoming, Call}, incoming=StateN
 	end,
 
     ok = send_response(State#state.invite, Status, Reason),
-    {next_state, StateName, State};
+    {stop, normal, State};
 
-handle_info({yate_call, hangup, Call}, outgoing=_StateName, State=#state{call=Call}) ->
+handle_info({yate_call, disconnected, Call}, outgoing=_StateName, State=#state{call=Call}) ->
     %% TODO cancel INVITE
     Invite_pid = State#state.invite_pid,
     ExtraHeaders = [],
     Invite_pid ! {cancel, "hangup", ExtraHeaders},
     {stop, normal, State};
 
-handle_info({yate_call, hangup, Call}, StateName=incoming, State=#state{call=Call}) ->
-    error_logger:info_msg("Call hangup ~p~n", [Call]),
-    %% TODO distinguish CANCEL and BYE
+handle_info({yate_call, disconnected, Call}, up=StateName, State=#state{call=Call}) ->
+    error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
     %% Send bye
     {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
 					       State#state.contact),
     {ok, Pid, Branch} = send_request(Bye),
     State1 = State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch},
-    {next_state, StateName, State1};
+    {next_state, bye_sent, State1};
 
-handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, StateName=incoming, #state{invite_pid=Pid}=State) ->
+handle_info({yate_call, hangup, Call}, StateName, State=#state{call=Call}) ->
+    error_logger:info_msg("~p: Call hangup ~p ~p~n", [?MODULE, Call, StateName]),
+    {next_state, StateName, State};
+
+handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, incoming=StateName, #state{invite_pid=Pid}=State) ->
     %% FIXME
     logger:log(normal, "servertransaction_cancelled ~n", []),
     ok = send_response(State#state.invite, 487, "Request Terminated"),
@@ -500,7 +524,7 @@ handle_info(timeout, incoming=StateName, State) ->
     ok = send_response(State#state.invite, 408, "Request Timeout"),
     ok = yate_call:drop(State#state.call, "Request Timeout"),
     {next_state, StateName, State};
-handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, StateName, #state{bye_pid = Pid, bye_branch = Branch} = State) ->
+handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, bye_sent=StateName, #state{bye_pid = Pid, bye_branch = Branch} = State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
     if
         BranchState == completed, Status >= 200, Status =< 299 ->
@@ -514,26 +538,43 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 		       [BranchState, Status, Response#response.reason]),
             {next_state, StateName, State}
     end;
-handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, StateName, #state{invite_pid = Pid, invite_branch = Branch} = State) ->
+handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, outgoing=StateName, #state{invite_pid = Pid, invite_branch = Branch} = State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
     Call = State#state.call,
     if
-        BranchState == completed, Status >= 200, Status =< 299 ->
-	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
-	    {next_state, StateName, State};
+        BranchState == terminated, Status >= 200, Status =< 299 ->
+	    logger:log(normal, "Answered dialog: ~p ~p", [BranchState, Status]),
+ 	    Request = State#state.invite,
+	    {ok, Dialog} =
+		sipdialog:create_dialog_state_uac(Request, Response),
+	    ok = sipdialog:register_dialog_controller(Dialog, self()),
+	    ok = yate_call:answer(Call),
+
+	    {ok, Ack, Dialog1} =
+		generate_new_request("ACK", Dialog, State#state.contact,
+				     State#state.invite_cseqno),
+	    {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(Ack),
+	    State1 = State#state{dialog=Dialog1},
+	    {next_state, up, State1};
+
+%%  	    {next_state, StateName, State};
 	BranchState == completed, Status >= 300, Status =< 699 ->
 	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
 	    ok = yate_call:drop(Call),
             {stop, normal, State};
-	Status == 180 ->
+	BranchState == proceeding, Status == 180 ->
 	    logger:log(normal, "Ringing: ~p ~p", [BranchState, Status]),
 	    ok = yate_call:ringing(Call),
-            {stop, normal, State};
+            {next_state, StateName, State};
         true ->
             logger:log(normal, "IGNORING response '~p ~p ~s' to my invite",
 		       [BranchState, Status, Response#response.reason]),
             {next_state, StateName, State}
     end;
+handle_info({new_response, #response{status=Status}=Response, Origin, _LogStr}, StateName, State) when is_record(Origin, siporigin) ->
+    logger:log(normal, "200OK retransmitt received '~p ~s' to my invite",
+	       [Status, Response#response.reason]),
+    {next_state, StateName, State};
 handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, incoming=StateName, State) ->
     %% Don't answer ACK
     %% TODO update dialog timeout?
@@ -575,8 +616,8 @@ handle_info(Info, StateName, State) ->
     {next_state, StateName, State}.
 
 
-terminate(_Reason, _StateName, _State) ->
-%%     error_logger:error_msg("Terminated~n", [?MODULE]),
+terminate(Reason, _StateName, _State) ->
+    error_logger:error_msg("~p: Terminated ~p~n", [?MODULE, Reason]),
     terminated.
 
 %% send_request() ->
@@ -597,3 +638,30 @@ send_request(Request) ->
 	  end,
     Pid = transactionlayer:start_client_transaction(Request, Dst, Branch, ?DEFAULT_TIMEOUT, self()),
     {ok, Pid, Branch}.
+
+
+send_ack(Request) ->
+    Branch = siprequest:generate_branch(),
+    send_ack(Request, Branch).
+
+send_ack(Request, Branch) ->
+    Route = keylist:fetch('route', Request#request.header),
+    TargetURI = Request#request.uri,
+    Dst = case Route of
+	      [] ->
+		  [Dst1 | _] = sipdst:url_to_dstlist(TargetURI, 500, TargetURI),
+		  Dst1;
+	      [FirstRoute | _] ->
+		  [FRC] = contact:parse([FirstRoute]),
+		  FRURL = sipurl:parse(FRC#contact.urlstr),
+		  [Dst1 | _] = sipdst:url_to_dstlist(FRURL, 500, TargetURI),
+		  Dst1
+	  end,
+
+    case transportlayer:send_proxy_request(none, Request, Dst,
+					   ["branch=" ++ Branch]) of
+	{ok, SendingSocket, TLBranch} ->
+	    {ok, SendingSocket, Dst, TLBranch};
+	_ ->
+	    error
+    end.
