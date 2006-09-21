@@ -462,9 +462,8 @@ handle_info({yate_call, progress, Call}, incoming=StateName, State=#state{call=C
     ok = send_response(State1, 183, "Session Progress", [], Body),
     {next_state, StateName, State1};
 
-handle_info({yate_call, answered, Call}, incoming=StateName, State=#state{call=Call}) ->
+handle_info({yate_call, answered, Call}, incoming=_StateName, State=#state{call=Call}) ->
     error_logger:info_msg("~p: autoanswer ~n", [?MODULE]),
-%%     ok = yate_call:answer(Call),
     {ok, State1} = send_200ok(State),
     {next_state, up, State1};
 
@@ -512,14 +511,12 @@ handle_info({yate_call, hangup, Call}, StateName, State=#state{call=Call}) ->
     error_logger:info_msg("~p: Call hangup ~p ~p~n", [?MODULE, Call, StateName]),
     {next_state, StateName, State};
 
-handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, incoming=StateName, #state{invite_pid=Pid}=State) ->
-    %% FIXME
+handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, incoming=_StateName, #state{invite_pid=Pid}=State) ->
     logger:log(normal, "servertransaction_cancelled ~n", []),
     ok = send_response(State#state.invite, 487, "Request Terminated"),
     ok = yate_call:drop(State#state.call, "Cancelled"),
-    {next_state, StateName, State};
+    {stop, normal, State};
 handle_info({servertransaction_terminating, Pid}, incoming=StateName, #state{invite_pid=Pid}=State) ->
-    %% FIXME
     logger:log(normal, "servertransaction_terminating ~n", []),
     {next_state, StateName, State};
 handle_info(timeout, incoming=StateName, State) ->
@@ -567,6 +564,8 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 
 %%  	    {next_state, StateName, State};
 	BranchState == completed, Status >= 300, Status =< 699 ->
+	    %% TODO follow 3xx redirect?
+	    %% TODO add reason to drop
 	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
 	    ok = yate_call:drop(Call),
             {stop, normal, State};
@@ -577,13 +576,15 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
     end;
 
 handle_info({new_response, #response{status=Status}=Response, Origin, _LogStr}, StateName, State) when is_record(Origin, siporigin) ->
-    logger:log(normal, "200OK retransmitt received '~p ~s' to my invite",
+    %% FIXME retransmit ACK
+    logger:log(normal, "200 OK retransmit received '~p ~s' to my invite",
 	       [Status, Response#response.reason]),
     {next_state, StateName, State};
 
 handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, incoming=StateName, State) ->
     %% Don't answer ACK
     %% TODO update dialog timeout?
+    %% FIXME stop retransmission of 200 Ok
     FromPid ! {ok, self(), Ref},
 %%     logger:log(normal, "Dialog received ACK"),
     {next_state, StateName, State};
