@@ -301,9 +301,9 @@ handle_message(call.execute, ans, Cmd, _From, State) ->
     Parent = State#state.parent,
     Parent ! {yate_call, execute, self()},
     {noreply, State1};
-handle_message(chan.disconnected, ans, _Cmd, _From, State) ->
+handle_message(chan.disconnected, ans, Cmd, _From, State) ->
     Parent = State#state.parent,
-    Parent ! {yate_call, disconnected, self()},
+    Parent ! {yate_call, disconnected, Cmd, self()},
     {noreply, State};
 handle_message(chan.hangup, ans, _Cmd, _From, State) ->
     Parent = State#state.parent,

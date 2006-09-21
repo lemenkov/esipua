@@ -460,21 +460,15 @@ handle_info({yate_call, answered, Call}, StateName=incoming, State=#state{call=C
     {ok, State1} = send_200ok(State),
     {next_state, StateName, State1};
 
-handle_info({yate_call, disconnected, Call}, incoming=_StateName, State=#state{call=Call}) ->
-    YReason = "Unknown",
-%% 	case command:find_key(reason, Cmd) of
-%% 	    {ok, YReason1} ->
-%% 		YReason1;
-%% 	    _ ->
-%% 		none
-%% 	end,
+handle_info({yate_call, disconnected, Cmd, Call}, incoming=_StateName, State=#state{call=Call}) ->
+    YReason =
+	case command:find_key(reason, Cmd) of
+	    {ok, YReason1} ->
+		YReason1;
+	    _ ->
+		none
+	end,
     error_logger:info_msg("~p: Call disconnect ~p~n", [?MODULE, YReason]),
-    %% TODO distinguish CANCEL and BYE
-    %% Send bye
-%%     {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
-%% 					       State#state.contact),
-%%     {ok, Pid, Branch} = send_request(Bye),
-%%     {next_state, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
     {Status, Reason} =
 	case YReason of
 	    "noroute" ->
