@@ -8,7 +8,7 @@
 
 
 %% api
--export([start_link/3, stop/0, process/1]).
+-export([start_link/3, stop/0]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -18,8 +18,19 @@
 	 handle_info/2,
 	 terminate/2]).
 
--record(state, {dialog, invite_pid, invite, bye_pid, bye_branch, handle, id, owner, peerid,
-	       address, port, sdp_body, contact}).
+-record(state, {dialog,				% SIP Dialog
+		invite,				% Original INVITE request
+		invite_pid,			% Original INVITE pid
+		bye_branch,			% BYE branch id
+		bye_pid,			% BYE pid
+		client,				% Yate client
+		handle,				% Yate handle
+		call,				% Yate call
+		address,			% Remote RTP address
+		port,				% Remote RTP port
+		contact,			% Local contact
+		sdp_body			% Local sdp_body
+	       }).
 
 -define(SERVER, ?MODULE).
 
@@ -187,7 +198,6 @@ start_generate_request(Method, From, To, ExtraHeaders, Body) ->
 
 start_link(Client, Request, LogStr) ->
     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
-    THandler = transactionlayer:get_handler_for_request(Request),
     gen_server:start_link(?MODULE, [Client, Request, LogStr, self()], []).
 
 adopt_transaction(THandler, Pid) ->
@@ -196,13 +206,6 @@ adopt_transaction(THandler, Pid) ->
     logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
     ok.
 
-%%
-%% Return when the transaction has completed or terminated.
-%%
-process(_Pid) ->
-%%     gen_server:call(Pid, process, 30000).
-    ok.
-    
 
 stop() ->
     gen_server:cast(?SERVER, stop).
@@ -228,7 +231,8 @@ init2(Client, Request, LogStr, _BranchBase, OldPid) ->
     ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
     Invite_pid = transactionlayer:get_pid_from_handler(THandler),
     State = #state{invite=Request, invite_pid=Invite_pid,
-		   handle=Handle, address=Address, port=Port},
+		   handle=Handle, address=Address, port=Port,
+		   client=Client},
 %%     {ok, _TRef} = timer:send_after(20000, timeout),
     execute(State).
 
@@ -248,7 +252,6 @@ parse_sdp(Request) ->
 
 execute(State) ->
     Call_to = "dumb/",
-    Handle = State#state.handle,
     Request = State#state.invite,
     Uri = Request#request.uri,
     Target = Uri#sipurl.user,
@@ -257,168 +260,50 @@ execute(State) ->
     FromUri = sipurl:parse(FromContact#contact.urlstr),
     Caller = FromUri#sipurl.user,
     Caller_name = FromContact#contact.display_name,
-    {ok, RetValue, RetCmd} =
-	yate:send_msg(Handle, call.execute,
-		      [
-		       {caller, Caller},
-		       {callername, Caller_name},
-		       {callto, Call_to},
-		       {target, Target}
-		      ]),
-    case RetValue of
-	false ->
-	    %% TODO return false
-	    ok = send_response(Request, 404, "Not found"),
-	    ignore;
-	true ->
-	    {ok, Auto} = fetch_auto_keys(RetCmd),
-	    Id = command:fetch_key(id, RetCmd),
-	    State1 = State#state{id=Id},
-	    {ok, State2} = setup(State1),
-	    send_auto_response(State2, Auto)
-    end.
-	    
+    {ok, Call} =
+	yate_call:execute_link(State#state.client,
+			       [
+				{caller, Caller},
+				{callername, Caller_name},
+				{callto, Call_to},
+				{target, Target}
+			       ]),
 
-fetch_auto_keys(Cmd) ->	    
-    Autokeys = [autoanswer, autoringing, autoprogress],
-    case fetch_auto_keys(Cmd, Autokeys, []) of
-	{ok, noauto} ->
-	    case command:find_key(targetid, Cmd) of
-		error ->
-		    {ok, autoanswer};
-		_ ->
-		    {ok, noauto}
-	    end;
-	{ok, Auto} ->
-	    Auto
-    end.
-
-fetch_auto_keys(_Cmd, [], _Res) ->
-    {ok, noauto};
-fetch_auto_keys(Cmd, [Key|R], Res) ->
-    case command:find_key(Key, Cmd) of
-	{ok, "true"} ->
-	    {ok, Key};
-	_ ->
-	    fetch_auto_keys(Cmd, R, Res)
-    end.
+    ok = send_response(State, 101, "Dialog Establishment"),
+    State1 = State#state{call=Call},
+    {ok, State2} = setup(State1),
+    {ok, State2}.
 
 
 setup(State) ->   
-    Handle = State#state.handle,
     Request = State#state.invite,
-    Id = State#state.id,
-    ok = yate:watch(Handle, chan.disconnected,
-		    fun(Cmd) ->
-			    Id == command:fetch_key(id, Cmd)
-		    end),
-    ok = yate:watch(Handle, call.ringing,
-		    fun(Cmd) ->
- 			    Id == command:fetch_key(targetid, Cmd)
-		    end),
-
-    ok = yate:watch(Handle, chan.hangup,
-		    fun(Cmd) ->
-			    Id == command:fetch_key(id, Cmd)
-		    end),
-    ok = yate:watch(Handle, call.progress,
-		    fun(Cmd) ->
-			    Id == command:fetch_key(targetid, Cmd)
-		    end),
-    ok = yate:watch(Handle, call.answered,
-		    fun(Cmd) ->
-			    Id == command:fetch_key(targetid, Cmd)
-		    end),
-    ok = yate:watch(Handle, call.drop,
-		    fun(Cmd) ->
-			    %% Check
-			    Id == command:fetch(targetid, Cmd)
-		    end),
 
     %% FIXME Contact
     Contact = "<sip:dummy@192.168.0.7:5080>",
     {ok, Dialog} = create_dialog(Request, Contact),
 
-    {ok, State1b} = startup(State, Id),
-    {ok, State1b#state{contact=Contact,dialog=Dialog}}.
+%%     {ok, State1b} = startup(State, Id),
+    {ok, State#state{contact=Contact,dialog=Dialog}}.
 
-
-send_auto_response(State, noauto) ->
-    ok = send_response(State, 101, "Dialog Establishment"),
-    {ok, State};
-send_auto_response(State, autoringing) ->
-    ok = send_response(State, 180, "Ringing"),
-    {ok, State};
-send_auto_response(State, autoprogress) ->
-    ok = send_response(State, 183, "Session Progress"),
-    {ok, State};
-send_auto_response(State, autoanswer) ->
-    send_200ok(State).
-
-
-startup(State, Id) ->
-    {ok, _RetValue, RetCmd} =
-	yate:send_msg(State#state.handle, chan.masquerade,
-		      [
-		       {message, "chan.startup"},
-		       {id, Id},
-		       {driver, "erlang"}
-		      ]),
-%%     Peer_id = command:fetch_key(peerid, RetCmd),
-%%     {ok, State#state{peerid=Peer_id}}.
-    {ok, State}.
-    
 
 get_sdp_body(State) ->
     case State#state.sdp_body of
 	undefined ->
-	    {ok, State1} = start_rtp(State, State#state.id),
+	    {ok, State1} = start_rtp(State),
 	    {ok, State1, State1#state.sdp_body};
 	_ ->
 	    {ok, State, State#state.sdp_body}
     end.
 
-start_rtp(State, Id) ->
-    {ok, _RetValue, RetCmd} =
-	yate:send_msg(State#state.handle, chan.masquerade,
-		      [
-		       {message, "chan.attach"},
-		       {id, Id},
-		       {notify, tag},
-		       {source, "rtp/*"},
- 		       {consumer, "rtp/*"},
-		       {remoteip, State#state.address},
-		       {remoteport, State#state.port},
-		       {format, "alaw"}
-		      ]),
-
-    case command:find_key(localport, RetCmd) of
-	{ok, Local_port} ->
-	    logger:log(normal, "sipclient: local rtp port ~p", [Local_port]);
-	_ ->
-	    ok
-    end,
-
-    Localip = command:fetch_key(localip, RetCmd),
-    Localport = list_to_integer(command:fetch_key(localport, RetCmd)),
+start_rtp(State) ->
+    Call = State#state.call,
+    Remote_address = State#state.address,
+    Remote_port = State#state.port,
+    {ok, Localip, Localport} =
+	yate_call:start_rtp(Call, Remote_address, Remote_port),
 
     {ok, Body} = create_sdp_body(Localip, Localport),
     {ok, State#state{sdp_body=Body}}.
-
-%%     ExtraHeaders = [
-%% 		    {"Contact", [Contact]}
-%% 		   ],
-%%     Request = State#state.invite,
-%%     ok = send_response(Request, 183, "Session Progress", ExtraHeaders, Body),
-
-answer(State, Id) ->
-    {ok, _RetValue, _RetCmd} =
-	yate:send_msg(State#state.handle, chan.masquerade,
-		      [
-		       {message, "call.answered"},
-		       {id, Id}
-		      ]),
-    ok.
 
 create_sdp_body(Localip, Localport) ->
     Seconds = integer_to_list(yate_util:seconds()),
@@ -462,7 +347,7 @@ send_response(Request, Status, Reason, ExtraHeaders, Body) when is_record(Reques
 
 send_response(Request, Status, Reason, ExtraHeaders, Body, undefined) when is_record(Request, request) ->
     send_response(Request, Status, Reason, ExtraHeaders, Body);
-send_response(Request, Status, Reason, ExtraHeaders, Body, Contact) when is_record(Request, request), Status > 299 ->
+send_response(Request, Status, Reason, ExtraHeaders, Body, _Contact) when is_record(Request, request), Status > 299 ->
     send_response(Request, Status, Reason, ExtraHeaders, Body);
 send_response(Request, Status, Reason, ExtraHeaders, Body, Contact) when is_record(Request, request), Status =< 299 ->
     ExtraHeaders1 = [{"Contact", [Contact]}] ++ ExtraHeaders,
@@ -473,8 +358,6 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
-handle_call(process, From, State) ->
-    {noreply, State#state{owner=From}};
 handle_call(Request, _From, State) ->
     error_logger:error_msg("Unhandled call in ~p: ~p~n", [?MODULE, Request]),
     {reply, ok, State}.
@@ -486,11 +369,71 @@ handle_cast(Request, State) ->
     error_logger:error_msg("Unhandled cast in ~p: ~p~n", [?MODULE, Request]),
     {noreply, State}.
 
+handle_info({yate_call, dialog, Call}, State=#state{call=Call}) ->
+    ok = send_response(State, 101, "Dialog Establishment"),
+    {noreply, State};
+
+handle_info({yate_call, ringing, Call}, State=#state{call=Call}) ->
+    %% FIXME send sdp if earlymedia=true
+    ok = send_response(State, 180, "Ringing"),
+    {noreply, State};
+
+handle_info({yate_call, progress, Call}, State=#state{call=Call}) ->
+    {ok, State1, Body} = get_sdp_body(State),
+    ok = send_response(State1, 183, "Session Progress", [], Body),
+    {noreply, State1};
+
+handle_info({yate_call, answered, Call}, State=#state{call=Call}) ->
+    error_logger:info_msg("~p: autoanswer ~n", [?MODULE]),
+%%     ok = yate_call:answer(Call),
+    {ok, State1} = send_200ok(State),
+    {noreply, State1};
+
+handle_info({yate_call, disconnected, Call}, State=#state{call=Call}) ->
+    Cmd = 'FIXME',
+    YReason = 
+	case command:find_key(reason, Cmd) of
+	    {ok, YReason1} ->
+		YReason1;
+	    _ ->
+		none
+	end,
+    error_logger:info_msg("Call disconnect ~p~n", [YReason]),
+    %% TODO distinguish CANCEL and BYE
+    %% Send bye
+%%     {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
+%% 					       State#state.contact),
+%%     {ok, Pid, Branch} = send_request(Bye),
+%%     {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
+    {Status, Reason} =
+	case YReason of
+	    "noroute" ->
+		{404, "Not Found"};
+	    "busy" ->
+		{486, "Busy Here"};
+ 	    "forbidden" ->
+ 		{403, "Forbidden"};
+	    _ ->
+		{500, "Internal Server Error"}
+	end,
+
+    ok = send_response(State#state.invite, Status, Reason),
+    {noreply, State};
+
+handle_info({yate_call, hangup, Call}, State=#state{call=Call}) ->
+    error_logger:info_msg("Call hangup ~p~n", [Call]),
+    %% TODO distinguish CANCEL and BYE
+    %% Send bye
+    {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
+					       State#state.contact),
+    {ok, Pid, Branch} = send_request(Bye),
+    {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
+
 handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, #state{invite_pid=Pid}=State) ->
     %% FIXME
     logger:log(normal, "servertransaction_cancelled ~n", []),
     ok = send_response(State#state.invite, 487, "Request Terminated"),
-    ok = drop(State#state.handle, State#state.id, "Cancelled"),
+    ok = yate_call:drop(State#state.call, "Cancelled"),
     {noreply, State};
 handle_info({servertransaction_terminating, Pid}, #state{invite_pid=Pid}=State) ->
     %% FIXME
@@ -498,11 +441,8 @@ handle_info({servertransaction_terminating, Pid}, #state{invite_pid=Pid}=State) 
     {noreply, State};
 handle_info(timeout, State) ->
     ok = send_response(State#state.invite, 408, "Request Timeout"),
-    ok = drop(State#state.handle, State#state.id, "Request Timeout"),
-%%     gen_server:reply(State#state.owner, ok),
+    ok = yate_call:drop(State#state.call, "Request Timeout"),
     {noreply, State};
-handle_info({yate, Dir, Cmd, From}, State) ->
-    handle_command(Cmd#command.type, Dir, Cmd, From, State);
 handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, #state{bye_pid = Pid, bye_branch = Branch} = State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
     if
@@ -537,7 +477,7 @@ handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State
 			%% answer BYE with 200 Ok
 			transactionlayer:send_response_handler(THandler, 200, "Ok"),
 			logger:log(normal, "Dialog ended by remote end (using BYE)"),
-			ok = drop(State#state.handle, State#state.id, "Normal Clearing"),
+			ok = yate_call:drop(State#state.call, "Normal Clearing"),
 			{stop, NewDialog1};
 		    _ ->
 			%% answer all unknown requests with 501 Not Implemented
@@ -563,15 +503,6 @@ terminate(_Reason, _State) ->
 
 %% send_request() ->
 
-drop(Handle, Id, Reason) ->
-    {ok, _RetValue, _RetCmd} =
-	yate:send_msg(Handle, call.drop,
-		      [
-		       {id, Id},
-		       {reason, Reason}
-		      ]),
-    ok.
-
 send_request(Request) ->
     Branch = siprequest:generate_branch(),
     Route = keylist:fetch('route', Request#request.header),
@@ -588,57 +519,3 @@ send_request(Request) ->
 	  end,
     Pid = transactionlayer:start_client_transaction(Request, Dst, Branch, ?DEFAULT_TIMEOUT, self()),
     {ok, Pid, Branch}.
-
-
-handle_command(message, Dir, Cmd, From, State) ->
-    Name = (Cmd#command.header)#message.name,
-    handle_message(Name, Dir, Cmd, From, State).
-
-handle_message(chan.hangup, ans, Cmd, _From, State) ->
-    Id = command:fetch_key(id, Cmd),
-    error_logger:info_msg("Call hangup ~p~n", [Id]),
-    %% TODO distinguish CANCEL and BYE
-    %% Send bye
-    {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
-					       State#state.contact),
-    {ok, Pid, Branch} = send_request(Bye),
-    {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
-handle_message(call.answered, ans, Cmd, _From, State) ->
-    Id = command:fetch_key(id, Cmd),
-    error_logger:info_msg("Handle answer ~p~n", [Id]),
-    {ok, State1} = send_200ok(State),
-    {noreply, State1};
-handle_message(call.ringing, ans, _Cmd, _From, State) ->
-    %% FIXME send sdp if earlymedia=true
-    ok = send_response(State, 180, "Ringing"),
-    {noreply, State};
-handle_message(chan.disconnected, ans, Cmd, _From, State) ->
-    Id = command:fetch_key(id, Cmd),
-    YReason = 
-	case command:find_key(reason, Cmd) of
-	    {ok, YReason1} ->
-		YReason1;
-	    _ ->
-		none
-	end,
-    error_logger:info_msg("Call disconnect ~p ~p~n", [Id, YReason]),
-    %% TODO distinguish CANCEL and BYE
-    %% Send bye
-%%     {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
-%% 					       State#state.contact),
-%%     {ok, Pid, Branch} = send_request(Bye),
-%%     {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
-    {Status, Reason} =
-	case YReason of
-	    "noroute" ->
-		{404, "Not Found"};
-	    "busy" ->
-		{486, "Busy Here"};
- 	    "forbidden" ->
- 		{403, "Forbidden"};
-	    _ ->
-		{500, "Internal Server Error"}
-	end,
-
-    ok = send_response(State#state.invite, Status, Reason),
-    {noreply, State}.
