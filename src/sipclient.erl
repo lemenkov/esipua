@@ -4,19 +4,19 @@
 
 -module(sipclient).
 
--behaviour(gen_server).
+-behaviour(gen_fsm).
 
 
 %% api
--export([start_link/3, stop/0]).
+-export([start_link/3, stop/0, call/4]).
 
-%% gen_server callbacks
+%% gen_fsm callbacks
 -export([init/1,
-	 code_change/3,
-	 handle_call/3,
-	 handle_cast/2,
-	 handle_info/2,
-	 terminate/2]).
+	 code_change/4,
+	 handle_event/3,
+	 handle_sync_event/4,
+	 handle_info/3,
+	 terminate/3]).
 
 -record(state, {dialog,				% SIP Dialog
 		invite,				% Original INVITE request
@@ -74,9 +74,9 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 %%
 %% outgoing yate call
 %%
-%% call(Client, Cmd, From, Args) ->
-%%     Id = dict:fetch(id, Cmd#command.keys),
-%%     start_link(Client, Id, Cmd, From, Args).
+call(Client, Cmd, From, Args) when is_record(Cmd, command) ->
+    Id = command:fetch_key(id, Cmd),
+    start_link(Client, Id, Cmd, From, Args).
 
 test() ->
     From = #contact{display_name = none,
@@ -198,7 +198,12 @@ start_generate_request(Method, From, To, ExtraHeaders, Body) ->
 
 start_link(Client, Request, LogStr) ->
     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
-    gen_server:start_link(?MODULE, [Client, Request, LogStr, self()], []).
+    gen_fsm:start_link(?MODULE, [Client, Request, LogStr, self()], []).
+
+
+start_link(Client, Id, Cmd, From, Args) ->
+    gen_fsm:start_link(?MODULE, [Client, Id, Cmd, From, Args], []).
+
 
 adopt_transaction(THandler, Pid) ->
     logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
@@ -208,10 +213,10 @@ adopt_transaction(THandler, Pid) ->
 
 
 stop() ->
-    gen_server:cast(?SERVER, stop).
+    error.
 
 %%
-%% gen_server callbacks
+%% gen_fsm callbacks
 %%
 init([Client, Request, LogStr, OldPid]) ->
     case transactionlayer:adopt_st_and_get_branchbase(Request) of
@@ -221,7 +226,21 @@ init([Client, Request, LogStr, OldPid]) ->
 	    {stop, error};
 	BranchBase ->
 	    init2(Client, Request, LogStr, BranchBase, OldPid)
-    end.
+    end;
+
+init([Client, _Id, Cmd, From, [_SipUri]]) ->
+    {ok, Call} = yate_call:start_link(Client, Cmd),
+    {ok, Handle} = yate:open(Client),
+
+    NewCmd = command:append_keys([
+				  {callto, "dumb/"},
+				  {autoring, false}
+				 ],
+				 Cmd),
+    yate:ret(From, NewCmd, false),
+
+    State = #state{client=Client,handle=Handle,call=Call},
+    {ok, outgoing, State}.
 
 init2(Client, Request, LogStr, _BranchBase, OldPid) ->
     {ok, Handle} = yate:open(Client),
@@ -272,7 +291,7 @@ execute(State) ->
     ok = send_response(State, 101, "Dialog Establishment"),
     State1 = State#state{call=Call},
     {ok, State2} = setup(State1),
-    {ok, State2}.
+    {ok, incoming, State2}.
 
 
 setup(State) ->   
@@ -354,57 +373,56 @@ send_response(Request, Status, Reason, ExtraHeaders, Body, Contact) when is_reco
     send_response(Request, Status, Reason, ExtraHeaders1, Body).
 
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+code_change(_OldVsn, StateName, State, _Extra) ->
+    {ok, StateName, State}.
 
 
-handle_call(Request, _From, State) ->
-    error_logger:error_msg("Unhandled call in ~p: ~p~n", [?MODULE, Request]),
-    {reply, ok, State}.
+handle_sync_event(Event, _From, StateName, State) ->
+    error_logger:error_msg("Unhandled call in ~p: ~p~n", [?MODULE, Event]),
+    {reply, ok, StateName, State}.
 
 
-handle_cast(stop, State) ->
+handle_event(stop, _StateName, State) ->
     {stop, normal, State};
-handle_cast(Request, State) ->
+handle_event(Request, StateName, State) ->
     error_logger:error_msg("Unhandled cast in ~p: ~p~n", [?MODULE, Request]),
-    {noreply, State}.
+    {next_state, StateName, State}.
 
-handle_info({yate_call, dialog, Call}, State=#state{call=Call}) ->
+handle_info({yate_call, dialog, Call}, StateName=incoming, State=#state{call=Call}) ->
     ok = send_response(State, 101, "Dialog Establishment"),
-    {noreply, State};
+    {next_state, StateName, State};
 
-handle_info({yate_call, ringing, Call}, State=#state{call=Call}) ->
+handle_info({yate_call, ringing, Call}, StateName=incoming, State=#state{call=Call}) ->
     %% FIXME send sdp if earlymedia=true
     ok = send_response(State, 180, "Ringing"),
-    {noreply, State};
+    {next_state, StateName, State};
 
-handle_info({yate_call, progress, Call}, State=#state{call=Call}) ->
+handle_info({yate_call, progress, Call}, StateName=incoming, State=#state{call=Call}) ->
     {ok, State1, Body} = get_sdp_body(State),
     ok = send_response(State1, 183, "Session Progress", [], Body),
-    {noreply, State1};
+    {next_state, StateName, State1};
 
-handle_info({yate_call, answered, Call}, State=#state{call=Call}) ->
+handle_info({yate_call, answered, Call}, StateName=incoming, State=#state{call=Call}) ->
     error_logger:info_msg("~p: autoanswer ~n", [?MODULE]),
 %%     ok = yate_call:answer(Call),
     {ok, State1} = send_200ok(State),
-    {noreply, State1};
+    {next_state, StateName, State1};
 
-handle_info({yate_call, disconnected, Call}, State=#state{call=Call}) ->
-    Cmd = 'FIXME',
-    YReason = 
-	case command:find_key(reason, Cmd) of
-	    {ok, YReason1} ->
-		YReason1;
-	    _ ->
-		none
-	end,
+handle_info({yate_call, disconnected, StateName=incoming, Call}, incoming=StateName, State=#state{call=Call}) ->
+    YReason = "Unknown",
+%% 	case command:find_key(reason, Cmd) of
+%% 	    {ok, YReason1} ->
+%% 		YReason1;
+%% 	    _ ->
+%% 		none
+%% 	end,
     error_logger:info_msg("Call disconnect ~p~n", [YReason]),
     %% TODO distinguish CANCEL and BYE
     %% Send bye
 %%     {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
 %% 					       State#state.contact),
 %%     {ok, Pid, Branch} = send_request(Bye),
-%%     {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
+%%     {next_state, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
     {Status, Reason} =
 	case YReason of
 	    "noroute" ->
@@ -418,32 +436,33 @@ handle_info({yate_call, disconnected, Call}, State=#state{call=Call}) ->
 	end,
 
     ok = send_response(State#state.invite, Status, Reason),
-    {noreply, State};
+    {next_state, StateName, State};
 
-handle_info({yate_call, hangup, Call}, State=#state{call=Call}) ->
+handle_info({yate_call, hangup, Call}, StateName=incoming, State=#state{call=Call}) ->
     error_logger:info_msg("Call hangup ~p~n", [Call]),
     %% TODO distinguish CANCEL and BYE
     %% Send bye
     {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
 					       State#state.contact),
     {ok, Pid, Branch} = send_request(Bye),
-    {noreply, State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch}};
+    State1 = State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch},
+    {next_state, StateName, State1};
 
-handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, #state{invite_pid=Pid}=State) ->
+handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, StateName=incoming, #state{invite_pid=Pid}=State) ->
     %% FIXME
     logger:log(normal, "servertransaction_cancelled ~n", []),
     ok = send_response(State#state.invite, 487, "Request Terminated"),
     ok = yate_call:drop(State#state.call, "Cancelled"),
-    {noreply, State};
-handle_info({servertransaction_terminating, Pid}, #state{invite_pid=Pid}=State) ->
+    {next_state, StateName, State};
+handle_info({servertransaction_terminating, Pid}, incoming=StateName, #state{invite_pid=Pid}=State) ->
     %% FIXME
     logger:log(normal, "servertransaction_terminating ~n", []),
-    {noreply, State};
-handle_info(timeout, State) ->
+    {next_state, StateName, State};
+handle_info(timeout, incoming=StateName, State) ->
     ok = send_response(State#state.invite, 408, "Request Timeout"),
     ok = yate_call:drop(State#state.call, "Request Timeout"),
-    {noreply, State};
-handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, #state{bye_pid = Pid, bye_branch = Branch} = State) ->
+    {next_state, StateName, State};
+handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, StateName, #state{bye_pid = Pid, bye_branch = Branch} = State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
     if
         BranchState == completed, Status >= 200, Status =< 299 ->
@@ -455,16 +474,16 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
         true ->
             logger:log(normal, "IGNORING response '~p ~p ~s' to my BYE",
 		       [BranchState, Status, Response#response.reason]),
-            {noreply, State}
+            {next_state, StateName, State}
     end;
-handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, State) ->
+handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, incoming=StateName, State) ->
     %% Don't answer ACK
     %% TODO update dialog timeout?
     FromPid ! {ok, self(), Ref},
 %%     logger:log(normal, "Dialog received ACK"),
-    {noreply, State};
+    {next_state, StateName, State};
 
-handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State) ->
+handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, StateName, State) ->
     THandler = transactionlayer:get_handler_for_request(NewRequest),
     FromPid ! {ok, self(), Ref},
     {Action, NewDialog} = 
@@ -482,22 +501,23 @@ handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State
 		    _ ->
 			%% answer all unknown requests with 501 Not Implemented
 			transactionlayer:send_response_handler(THandler, 501, "Not Implemented"),
-			{noreply, NewDialog1}
+			{next_state, NewDialog1}
 		end
 	end,
 
     case Action of
-        noreply ->
-            {noreply, State#state{dialog = NewDialog}};
+        next_state ->
+            {next_state, StateName, State#state{dialog = NewDialog}};
         stop ->
             {stop, normal, State#state{dialog = NewDialog}}
     end;
-handle_info(Info, State) ->
-    error_logger:error_msg("Unhandled info in ~p: ~p~n", [?MODULE, Info]),
-    {noreply, State}.
+handle_info(Info, StateName, State) ->
+    error_logger:error_msg("~p: Unhandled info in ~p ~p~n",
+			   [?MODULE, Info, StateName]),
+    {next_state, StateName, State}.
 
 
-terminate(_Reason, _State) ->
+terminate(_Reason, _StateName, _State) ->
 %%     error_logger:error_msg("Terminated~n", [?MODULE]),
     terminated.
 
