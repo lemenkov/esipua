@@ -77,6 +77,10 @@ init([]) ->
 		      fun(_Cmd) ->
 			      true
 		      end),
+    ok = yate:watch(Handle, chan.rtp,
+		      fun(_Cmd) ->
+			      true
+		      end),
     {ok, #state{handle=Handle, client=Client}}.
 
 
@@ -152,12 +156,24 @@ handle_call_route("demo", Cmd, From, State) ->
 handle_call_route("clock", Cmd, From, State) ->
     yate:ret(From, Cmd, true, "erl/yate_clock/start"),
     {noreply, State};
+handle_call_route("echo2", Cmd, From, State) ->
+    yate:ret(From, Cmd, true, "erl/sipclient/call/sip:600@mulder"),
+    {noreply, State};
 handle_call_route("mikael", Cmd, From, State) ->
     error_logger:info_msg("Route mikael~n"),
     yate:ret(From, Cmd, true, "sip/sip:1002@mulder"),
     {noreply, State};
+handle_call_route("2002", Cmd, From, State) ->
+    yate:ret(From, Cmd, true, "erl/sipclient/call/sip:2002@skinner.hem.za.org"),
+    {noreply, State};
 handle_call_route("dial", Cmd, From, State) ->
     yate:ret(From, Cmd, true, "sip/sip:99991001@192.168.0.7:5080"),
+    {noreply, State};
+handle_call_route("ydial", Cmd, From, State) ->
+    yate:ret(From, Cmd, true, "sip/sip:99991001@192.168.0.7:5072"),
+    {noreply, State};
+handle_call_route("reason=" ++ ReasonStr, Cmd, From, State) ->
+    yate:ret(From, Cmd, true, "reason/" ++ ReasonStr),
     {noreply, State};
 handle_call_route(Called, Cmd, From, State) ->
     yate:ret(From, Cmd, false),
