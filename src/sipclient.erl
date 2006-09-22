@@ -279,12 +279,11 @@ init([Client, _Id, Cmd, From, [SipUri]]) ->
 		     contact_param = contact_param:to_norm([])
 		    },
     Method = "INVITE",
-
-    Localip = "192.168.0.7",
-    Localport = 12345,
-    {ok, Body} = create_sdp_body(Localip, Localport),
-
     Contact = CallerUri,
+
+    State = #state{client=Client,handle=Handle,call=Call,contact=Contact},
+    Body = <<>>,
+
     {ok, Request, _CallId, _FromTag, CSeqNo} =
 	start_generate_request(Method,
                                FromHdr,
@@ -295,12 +294,8 @@ init([Client, _Id, Cmd, From, [SipUri]]) ->
 			       Body
                               ),
 
-    {ok, Pid, Branch} = send_request(Request),
-
-    State = #state{client=Client,handle=Handle,call=Call,contact=Contact,
-		   invite=Request,invite_pid=Pid,invite_branch=Branch,
-		   sdp_body=Body, invite_cseqno=CSeqNo},
-    {ok, outgoing, State}.
+    State2 = State#state{invite=Request, invite_cseqno=CSeqNo, sdp_body=Body},
+    {ok, outgoing, State2}.
 
 init2(Client, Request, LogStr, _BranchBase, OldPid) ->
     {ok, Handle} = yate:open(Client),
@@ -339,15 +334,22 @@ execute(State) ->
     FromUri = sipurl:parse(FromContact#contact.urlstr),
     Caller = FromUri#sipurl.user,
     Caller_name = FromContact#contact.display_name,
-    {ok, Call} =
-	yate_call:execute_link(State#state.client,
+    catch case yate_call:execute_link(State#state.client,
 			       [
 				{caller, Caller},
 				{callername, Caller_name},
 				{callto, Call_to},
 				{target, Target}
-			       ]),
+			       ]) of
+	{error, {noroute, Cmd}} ->
+	    %% FIXME reason
+	    ok = send_response(State, 404, "Not Found"),
+	    {stop, normal};
+	{ok, Call} ->
+	    execute_finish(Call, State)
+    end.
 
+execute_finish(Call, State) ->
     ok = send_response(State, 101, "Dialog Establishment"),
     State1 = State#state{call=Call},
     {ok, State2} = setup(State1),
@@ -380,6 +382,14 @@ start_rtp(State) ->
     Remote_port = State#state.port,
     {ok, Localip, Localport} =
 	yate_call:start_rtp(Call, Remote_address, Remote_port),
+
+    {ok, Body} = create_sdp_body(Localip, Localport),
+    {ok, State#state{sdp_body=Body}}.
+
+start_rtp_receiver(State, Remote_addr) ->
+    Call = State#state.call,
+    {ok, Localip, Localport} =
+	yate_call:start_rtp(Call, Remote_addr),
 
     {ok, Body} = create_sdp_body(Localip, Localport),
     {ok, State#state{sdp_body=Body}}.
@@ -448,6 +458,21 @@ handle_event(Request, StateName, State) ->
     error_logger:error_msg("Unhandled cast in ~p: ~p~n", [?MODULE, Request]),
     {next_state, StateName, State}.
 
+
+handle_info({yate_call, execute, Call}, outgoing=StateName, State=#state{call=Call}) ->
+    error_logger:info_msg("~p: execute ~p~n", [?MODULE, StateName]),
+    Remote_addr = "192.168.0.1",
+    {ok, State1} = start_rtp_receiver(State, Remote_addr),
+    Request = State1#state.invite,
+    Body = State1#state.sdp_body,
+
+    Request1 = siprequest:set_request_body(Request, Body),
+    {ok, Pid, Branch} = send_request(Request1),
+
+    State2 = State1#state{invite_branch=Branch,invite_pid=Pid,
+			  invite=Request1},
+    {next_state, StateName, State2};
+
 handle_info({yate_call, dialog, Call}, incoming=StateName, State=#state{call=Call}) ->
     ok = send_response(State, 101, "Dialog Establishment"),
     {next_state, StateName, State};
@@ -476,29 +501,20 @@ handle_info({yate_call, disconnected, Cmd, Call}, incoming=_StateName, State=#st
 		none
 	end,
     error_logger:info_msg("~p: Call disconnect ~p~n", [?MODULE, YReason]),
-    {Status, Reason} =
-	case YReason of
-	    "noroute" ->
-		{404, "Not Found"};
-	    "busy" ->
-		{486, "Busy Here"};
- 	    "forbidden" ->
- 		{403, "Forbidden"};
-	    _ ->
-		{500, "Internal Server Error"}
-	end,
+    Status = reason_to_sipstatus(YReason),
 
-    ok = send_response(State#state.invite, Status, Reason),
+    ok = send_response(State#state.invite, Status, YReason),
     {stop, normal, State};
 
-handle_info({yate_call, disconnected, Call}, outgoing=_StateName, State=#state{call=Call}) ->
-    %% TODO cancel INVITE
+handle_info({yate_call, disconnected, _Cmd, Call}, outgoing=StateName, State=#state{call=Call}) ->
+    %% TODO add reason beader
+    error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
     Invite_pid = State#state.invite_pid,
     ExtraHeaders = [],
     Invite_pid ! {cancel, "hangup", ExtraHeaders},
     {stop, normal, State};
 
-handle_info({yate_call, disconnected, Call}, up=StateName, State=#state{call=Call}) ->
+handle_info({yate_call, disconnected, _Cmd, Call}, up=StateName, State=#state{call=Call}) ->
     error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
     %% Send bye
     {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
@@ -563,11 +579,18 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 	    {next_state, up, State1};
 
 %%  	    {next_state, StateName, State};
-	BranchState == completed, Status >= 300, Status =< 699 ->
+	BranchState == completed, Status >= 300, Status =< 399 ->
 	    %% TODO follow 3xx redirect?
 	    %% TODO add reason to drop
 	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
 	    ok = yate_call:drop(Call),
+            {stop, normal, State};
+	BranchState == completed, Status >= 400, Status =< 699 ->
+	    %% TODO follow 3xx redirect?
+	    %% TODO add reason to drop
+	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
+	    Reason = sipstatus_to_reason(Status),
+	    ok = yate_call:drop(Call, Reason),
             {stop, normal, State};
         true ->
             logger:log(normal, "IGNORING response '~p ~p ~s' to my invite",
@@ -672,3 +695,86 @@ send_ack(Request, Branch) ->
 	_ ->
 	    error
     end.
+
+sipstatus_to_reason(401) ->
+    noauth;
+sipstatus_to_reason(403) ->
+    forbidden;
+sipstatus_to_reason(404) ->
+    noroute;
+%% sipstatus_to_reason(404) ->
+%%     offline;
+sipstatus_to_reason(406) ->
+    rejected;
+sipstatus_to_reason(415) ->
+    nomedia;
+sipstatus_to_reason(480) ->
+    congestion;
+sipstatus_to_reason(483) ->
+    looping;
+sipstatus_to_reason(481) ->
+    nocall;
+sipstatus_to_reason(484) ->
+    incomplete;
+sipstatus_to_reason(486) ->
+    busy;
+sipstatus_to_reason(487) ->
+    noanswer;
+sipstatus_to_reason(491) ->
+    pending;
+sipstatus_to_reason(Status) when Status >= 400, Status =< 499 ->
+    failure;
+
+sipstatus_to_reason(503) ->
+    noconn;
+sipstatus_to_reason(Status) when Status >= 500, Status =< 599 ->
+    failure;
+
+sipstatus_to_reason(603) ->
+    forbidden;
+sipstatus_to_reason(606) ->
+    rejected;
+sipstatus_to_reason(604) ->
+    noroute;
+sipstatus_to_reason(Status) when Status >= 600, Status =< 699 ->
+    busy.
+
+reason_to_sipstatus(incomplete) ->
+    484;
+reason_to_sipstatus(noroute) ->
+    404;
+reason_to_sipstatus(noconn) ->
+    503;
+reason_to_sipstatus(noauth) ->
+    401;
+reason_to_sipstatus(nomedia) ->
+    415;
+reason_to_sipstatus(nocall) ->
+    481;
+reason_to_sipstatus(busy) ->
+    486;
+reason_to_sipstatus(noanswer) ->
+    487;
+reason_to_sipstatus(rejected) ->
+    406;
+reason_to_sipstatus(forbidden) ->
+    403;
+reason_to_sipstatus(offline) ->
+    404;
+reason_to_sipstatus(congestion) ->
+    480;
+reason_to_sipstatus(failure) ->
+    500;
+reason_to_sipstatus(pending) ->
+    491;
+reason_to_sipstatus(looping) ->
+    483;
+reason_to_sipstatus(Reason) ->
+    error_logger:error_msg("~p: Unknown reason code '~p', returning 500~n",
+			   [?MODULE, Reason]),
+    500.
+
+%% {404, "Not Found"};
+%% {486, "Busy Here"};
+%% {403, "Forbidden"};
+%% {500, "Internal Server Error"}

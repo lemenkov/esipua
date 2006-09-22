@@ -6,7 +6,7 @@
 
 %% api
 -export([start_link/2, execute_link/2, answer/1, drop/2, drop/1,
-	 play_wave/3, play_tone/2, start_rtp/3,
+	 play_wave/3, play_tone/2, start_rtp/2, start_rtp/3,
 	 ringing/1, stop/1]).
 
 %% gen_server callbacks
@@ -29,16 +29,12 @@
 start_link(Client, Cmd) ->
     %% Can't use gen_server:start_link, since we need to trap exit
     %% from our parent.
-    {ok, Pid} = gen_server:start(?MODULE, [Client, Cmd, self()], []),
-    link(Pid),
-    {ok, Pid}.
+    gen_server:start(?MODULE, [Client, Cmd, self()], []).
 
 execute_link(Client, Keys) ->
     %% Can't use gen_server:start_link, since we need to trap exit
     %% from our parent.
-    {ok, Pid} = gen_server:start(?MODULE, [Client, Keys, self()], []),
-    link(Pid),
-    {ok, Pid}.
+    gen_server:start(?MODULE, [Client, Keys, self()], []).
 
 
 answer(Call) ->
@@ -62,6 +58,10 @@ start_rtp(Call, Remote_address, Remote_port) ->
     error_logger:info_msg("~p: start_rtp~n", [?MODULE]),
     gen_server:call(Call, {start_rtp, Remote_address, Remote_port}).
 
+start_rtp(Call, Remote_address) ->
+    error_logger:info_msg("~p: start_rtp~n", [?MODULE]),
+    gen_server:call(Call, {start_rtp, Remote_address}).
+
 ringing(Call) ->
     gen_server:call(Call, ringing).
 
@@ -73,28 +73,19 @@ stop(Call) ->
 %%
 init([Client, Cmd, Parent]) when is_record(Cmd, command) ->
     process_flag(trap_exit, true),
+    link(Parent),
     {ok, Handle} = yate:open(Client),
-    Status =
-	case command:find_key(status, Cmd) of
-	    {ok, "incoming"} ->
-		incoming;
-	    {ok, "outgoing"} ->
-		outgoing;
-	    error ->
-		outgoing
-    end,
-
+    Status = incoming,
     State0 = #state{client=Client,parent=Parent,handle=Handle},
-    {ok, State} = setup(Status, Cmd, State0),
-    {ok, State};
+    setup(Status, Cmd, State0);
 
 init([Client, Keys, Parent]) when is_list(Keys) ->
     process_flag(trap_exit, true),
+    link(Parent),
     {ok, Handle} = yate:open(Client),
     Status = outgoing,
     State0 = #state{client=Client,parent=Parent,handle=Handle},
-    {ok, State} = setup(Status, Keys, State0),
-    {ok, State}.
+    setup(Status, Keys, State0).
 
 setup(incoming, Cmd, State) ->
     Id = command:fetch_key(id, Cmd),
@@ -113,7 +104,7 @@ setup(outgoing, Keys, State) ->
 	false ->
 	    %% TODO return false
 	    Parent ! {yate_call, notfound, self()},
-	    ignore;
+	    {stop, {noroute, RetCmd}};
 	true ->
 	    {ok, Auto} = fetch_auto_keys(RetCmd),
 	    Id = command:fetch_key(id, RetCmd),
@@ -233,6 +224,28 @@ handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
 %% 	_ ->
 %% 	    ok
 %%     end,
+
+    {reply, {ok, Localip, Localport}, State};
+
+handle_call({start_rtp, Remote_address}, _From, State) ->
+    Id = State#state.id,
+    Handle = State#state.handle,
+    Format = alaw,
+
+    {ok, true, RetCmd} =
+	yate:send_msg(Handle, chan.masquerade,
+		      [
+		       {message, chan.rtp},
+		       {transport, "RTP/AVP"},
+		       {media, "audio"},
+		       {direction, "receive"},
+		       {id, Id},
+		       {format, Format},
+		       {remoteip, Remote_address}
+		      ]),
+
+    Localip = command:fetch_key(localip, RetCmd),
+    Localport = list_to_integer(command:fetch_key(localport, RetCmd)),
 
     {reply, {ok, Localip, Localport}, State};
 
