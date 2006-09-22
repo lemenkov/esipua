@@ -9,6 +9,8 @@
 %%-export([connect/2, stop/1, install/2, install/3, uninstall/2, watch/2, unwatch/2, ret/3, ret/4, queue_msg/3, send_msg/3]).
 -export([connect/2, open/1, dup/1, close/1, install/3, uninstall/2, watch/3, unwatch/2, ret/3, ret/4, queue_msg/4, send_msg/3]).
 
+-export([make/0]).
+
 -include("yate.hrl").
 
 %%--------------------------------------------------------------------
@@ -153,6 +155,42 @@ send_msg(Handle, Name, Keys) ->
 %% stop(Handle) ->
 %%     gen_server:cast(Handle, stop).
 
+
+make() ->
+    Modules = [
+		"command",
+		"key_dict",
+		"key_list",
+		"yate_demo_call",
+		"yate_srv",
+		"yate_demo",
+		"yate_conn",
+		"yate_encode",
+		"yate_test",
+		"yate_conn_srv",
+		"yate",
+		"yate_util",
+		"yate_decode",
+		"yate_app",
+		"yate_demo_sup",
+		"yate_demo_app",
+		"yate_port_srv",
+		"yate_port_sup",
+		"yate_pending",
+		"yate_clock",
+		"yate_call",
+		"yate_notify"
+	    ],
+
+    Prefix = "../../../src/yate/",
+    Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
+
+    make:files(Files,
+	       [load,
+		{i, "../../../include"},
+		{i, "/usr/lib/yxa/include"},
+		{outdir, "../../src/yate"},
+		debug_info]).
 
 %%
 %% private functions

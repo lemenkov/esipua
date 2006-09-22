@@ -7,6 +7,9 @@ bin_PROGRAMS = wrapper
 wrapper_SOURCES = wrapper.c
 
 erl_FILES = \
+command.erl \
+key_dict.erl \
+key_list.erl \
 yate_app.erl \
 yate_call.erl \
 yate_clock.erl \
@@ -32,7 +35,7 @@ beam_FILES = $(erl_FILES:.erl=.beam)
 
 ebin_DATA = $(beam_FILES) yate.app yate.boot
 EXTRA_DIST = $(erl_FILES) yate.app-in yate.rel
-CLEANFILES = $(beam_FILES) yate.app
+CLEANFILES = $(beam_FILES) yate.app yate.boot yate.script
 
 ERLFLAGS = 
 EFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include

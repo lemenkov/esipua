@@ -18,6 +18,8 @@
 %% api
 -export([start_link/3, stop/0, call/4]).
 
+-export([make/0]).
+
 %% gen_fsm callbacks
 -export([init/1,
 	 code_change/4,
@@ -778,3 +780,22 @@ reason_to_sipstatus(Reason) ->
 %% {486, "Busy Here"};
 %% {403, "Forbidden"};
 %% {500, "Internal Server Error"}
+
+
+
+make() ->
+    Modules = [
+		"sdp",
+		"sipclient",
+		"ysip_srv"
+	    ],
+
+    Prefix = "../../../src/esipua/",
+    Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
+
+    make:files(Files,
+	       [load,
+		{i, "../../../include"},
+		{i, "/usr/lib/yxa/include"},
+		{outdir, "../../src/esipua"},
+		debug_info]).

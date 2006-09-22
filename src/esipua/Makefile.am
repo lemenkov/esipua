@@ -2,9 +2,6 @@ erlangdir = $(libdir)/erlang
 ebindir = $(erlangdir)/esipua-0.1/ebin
 
 erl_FILES = \
-command.erl \
-key_dict.erl \
-key_list.erl \
 sdp.erl \
 sipclient.erl \
 ysip_srv.erl
@@ -13,7 +10,7 @@ beam_FILES = $(erl_FILES:.erl=.beam)
 
 ebin_DATA = $(beam_FILES) sipclient.app sipclient.boot
 EXTRA_DIST = $(erl_FILES) sipclient.app-in sipclient.rel
-CLEANFILES = $(beam_FILES) sipclient.app
+CLEANFILES = $(beam_FILES) sipclient.app sipclient.boot sipclient.script
 
 YXABUILDDIR = /home/mikael/tmp/cvs/yxa/build_linux
 ERLFLAGS = \
