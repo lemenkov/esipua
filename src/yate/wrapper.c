@@ -77,16 +77,20 @@ int main(int argc, char *argv[])
     int pipes[2][2];
     int i;
     char **args;
+    const char *directory;
 
-    if (argc < 2) {
-	fprintf(stderr, "Usage: %s program [args*]\n", argv[0]);
+    if (argc < 3) {
+	fprintf(stderr, "Usage: %s directory program [args*]\n", argv[0]);
 	return 1;
     }
 
+    directory = argv[1];
+    chdir(directory);
+
     args = (char **)calloc(argc, sizeof(args[0]));
-    args[argc - 1] = NULL;
-    for (i = 1; i < argc; i++) {
-	args[i - 1] = argv[i];
+    args[argc - 2] = NULL;
+    for (i = 2; i < argc; i++) {
+	args[i - 2] = argv[i];
     }
 
     for (i = 0; i < 2; i++) {

@@ -1,0 +1,24 @@
+{application, sipclient,
+ [{description, "Yate sip server"},
+  {vsn,"0.0"},
+  {modules, [
+             command,
+             key_dict,
+             key_list,
+             sdp,
+             sipclient,
+             ysip_srv
+            ]},
+  {registered, [
+                sipserver_sup,
+                yxa_config,
+                logger,
+                ldap_client,
+                tcp_dispatcher,
+                sipsocket_udp,
+                transactionlayer
+               ]},
+  {mod, {sipserver, [sipclient]}},
+  {env, []},
+  {applications,
+        [kernel, stdlib, yate]}]}.

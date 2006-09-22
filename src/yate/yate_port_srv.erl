@@ -23,7 +23,8 @@
 -record(sstate, {pid, port, state=startup, waiting=[]}).
 
 -define(SERVER, ?MODULE).
--define(PROG, "./wrapper /usr/bin/yate"). %%  -vvvvvvvvv
+%% -define(PROG, "./wrapper /usr/bin/yate -vvvvvvvvv").
+-define(PROG, "../yate/wrapper /home/mikael/tmp/cvs/yate/build_linux ./run -vvvvvvvvv").
 -define(TIMEOUT_5S, 5000).
 
 
