@@ -42,5 +42,5 @@ EFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include -I/usr/lib/yxa/include
 	$(ERLC) $(EFLAGS) $<
 
 run:
-	$(ERL) $(ERLFLAGS) -name eryate -boot yate -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -yxa_config sipclient.config
+	$(ERL) $(ERLFLAGS) -name eryate -boot sipclient -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -yxa_config sipclient.config
 #	$(ERL) -boot yate -sasl sasl_error_logger '{file,"sasl.log"}'
