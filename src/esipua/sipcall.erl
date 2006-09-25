@@ -786,7 +786,6 @@ reason_to_sipstatus(Reason) ->
 make() ->
     Modules = [
 		"sdp",
-		"sipcall",
 		"sipclient",
 		"ysip_srv"
 	    ],

@@ -3,6 +3,7 @@ ebindir = $(erlangdir)/esipua-0.1/ebin
 
 erl_FILES = \
 sdp.erl \
+sipcall.erl \
 sipclient.erl \
 ysip_srv.erl
 
