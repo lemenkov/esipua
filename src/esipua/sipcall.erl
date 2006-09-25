@@ -10,7 +10,7 @@
 %% bye_sent - SIP BYE sent
 %%
 
--module(sipclient).
+-module(sipcall).
 
 -behaviour(gen_fsm).
 
