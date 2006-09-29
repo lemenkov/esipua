@@ -1,19 +1,23 @@
-%%
-%% States:
-%% unregistered - not registered, initial state 
-%% pending      - request send
-%% registered   - aor registered
-%%
+%%%
+%%% @doc       SIP REGISTER server
+%%% @author    Mikael Magnusson <mikma@users.sourceforge.net>
+%%% @copyright 2006 Mikael Magnusson
+%%%
+%%%
+%%% States:
+%%% unregistered - not registered, initial state 
+%%% pending      - request send
+%%% registered   - aor registered
+%%%
 -module(sipregister).
+
+-behaviour(gen_fsm).
 
 -define(DEFAULT_EXPIRE, 1 * 60).
 -define(MIN_EXPIRE, 30).
 
 -include("siprecords.hrl").
 -include("sipsocket.hrl").
--include("sdp.hrl").
-
--export([]).
 
 %% api
 -export([build_register/1,
@@ -21,9 +25,6 @@
 	 start_link/1,
 	 send_register/1,
 	 send_unregister/1]).
-
-%% sipregister behaviour
--export([behaviour_info/1]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -39,29 +40,26 @@
 	 registered/2]).
 
 -record(state, {
-	  module,
-	  options,
-	  owner,
-	  contact_urlstr,
-	  reg,
-	  reg_pending,
-	  reg_branch,
-	  reg_pid,
-	  reg_cseqno=1,
-	  retry_timer,
-	  rereg_timer,
-	  auths=[]
+	  owner,				% Receives notifications
+	  contact_urlstr,			% Contact url
+	  reg,					% Initial request
+	  reg_pending,				% Last request
+	  reg_branch,				% Last branch
+	  reg_pid,				% Last pid
+	  reg_cseqno=1,				% Next CSeq number
+	  retry_timer,				% 401/407 retry timer
+	  rereg_timer,				% reREGISTER timer
+	  auths=[]				% Authentication 
 	 }).
 
 
-behaviour_info(callbacks) ->
-    [{init, 1}];
-behaviour_info(_Other) ->
-    undefined.
-
-%%
-%% build_register
-%%
+%%--------------------------------------------------------------------
+%% @spec build_register(Aor) -> {ok, Request}
+%%           Aor = string()
+%%           Request = request()
+%% @doc Build REGISTER request for given SIP address (Aor)
+%% @end
+%%--------------------------------------------------------------------
 build_register(Aor) when is_list(Aor) ->
     [From] = contact:parse([Aor]),
     {ok, Request, _CallId, _FromTag, _CSeqNo} =
@@ -73,28 +71,55 @@ build_register(Aor) when is_list(Aor) ->
                               ),
     {ok, Request}.
 
+
+%%--------------------------------------------------------------------
+%% @spec start_link(Request) -> Result
+%%           Request = request()
+%%           Result = {ok, Pid}
+%% @doc Start REGISTER process, calling process receives notifications
+%%--------------------------------------------------------------------
 start_link(Request) when is_record(Request, request) ->
     start_link(Request, self()).
 
+
+%%--------------------------------------------------------------------
+%% @spec start_link(Request, Owner) -> Result
+%%           Request = request()
+%%           Owner = pid()
+%%           Result = {ok, Pid}
+%% @doc Start REGISTER process, Owner receives notifications
+%%--------------------------------------------------------------------
 start_link(Request, Owner) when is_record(Request, request) ->
     gen_fsm:start_link(?MODULE, [Request, Owner], []).
 
-%%
-%% Register AOR 
-%%
-send_register(Call) when is_pid(Call) ->
-    gen_fsm:send_event(Call, register).
 
-%%
-%% Unregister AOR
-%%
-send_unregister(Call) when is_pid(Call) ->
-    gen_fsm:send_event(Call, unregister).
+%%--------------------------------------------------------------------
+%% @spec send_register(Pid) -> Result
+%%           Pid = pid()
+%%           Result = ok
+%% @doc Register SIP address
+%%--------------------------------------------------------------------
+send_register(Pid) when is_pid(Pid) ->
+    gen_fsm:send_event(Pid, register).
 
-%%
+
+%%--------------------------------------------------------------------
+%% @spec send_unregister(Pid) -> Result
+%%           Pid = pid()
+%%           Result = ok
+%% @doc Unregister SIP address
+%%--------------------------------------------------------------------
+send_unregister(Pid) when is_pid(Pid) ->
+    gen_fsm:send_event(Pid, unregister).
+
+
+%%--------------------------------------------------------------------
 %% gen_fsm callbacks
 %%
-
+%% FIXME need to regenerate to-tag and call-id, if it has been
+%% restarted by the supervisor
+%% add username, password config
+%%--------------------------------------------------------------------
 init([Request, Owner]) when is_record(Request, request),
 				 is_pid(Owner) ->
     Contacts_str = keylist:fetch('contact', Request#request.header),
@@ -105,7 +130,6 @@ init([Request, Owner]) when is_record(Request, request),
 		   contact_urlstr = Contact_urlstr,
 		   reg=Request},
 
-%%     {ok, State1} = do_send_probe(Request, State),
     {ok, State1} = do_send_register(Request, State),
     {ok, pending, State1}.
 
@@ -251,7 +275,7 @@ handle_info({branch_result, Pid, Branch, _BranchState, #response{status=Status}=
 	    {stop, {siperror, Status, Response#response.reason}, State}
     end;
 
-handle_info(Info, StateName, State) ->
+handle_info(_Info, StateName, State) ->
     error_logger:error_msg("~p: Unhandled info in ~p~n",
 			   [?MODULE, StateName]),
     {next_state, StateName, State}.

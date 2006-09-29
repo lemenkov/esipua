@@ -1,5 +1,5 @@
 %%%
-%%% @doc       SIP REGISTER client supervisor
+%%% @doc       SIP REGISTER supervisor
 %%% @author    Mikael Magnusson <mikma@users.sourceforge.net>
 %%% @copyright 2006 Mikael Magnusson
 %%%
@@ -10,7 +10,11 @@
 -include("siprecords.hrl").
 
 %% api
--export([start_link/0, start_child/3, find_child/1]).
+-export([
+	 start_link/0,
+	 find_child/1
+	 start_child/3,
+	]).
 
 %% supervisor
 -export([init/1]).
@@ -27,6 +31,12 @@ start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 
+%%--------------------------------------------------------------------
+%% @spec find_child(Aor) -> Result
+%%           Result = {ok, Pid} | error
+%% @doc Find pid registering an AOR
+%% @end
+%%--------------------------------------------------------------------
 find_child(Aor) when is_list(Aor) ->
     Fun = fun({Id, _Pid, _Type, _Modules}) ->
 		  Aor == Id
