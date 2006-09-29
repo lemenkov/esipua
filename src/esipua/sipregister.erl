@@ -1,6 +1,4 @@
 %%
-%% TODO save authenticate headers in state for reuse.
-%%
 %% States:
 %% unregistered - not registered, initial state 
 %% pending      - request send
@@ -51,7 +49,8 @@
 	  reg_pid,
 	  reg_cseqno=1,
 	  retry_timer,
-	  rereg_timer
+	  rereg_timer,
+	  auths=[]
 	 }).
 
 
@@ -122,10 +121,10 @@ unregistered(register, State) ->
     {next_state, pending, State1}.
 
 pending(unregister, State) ->
-    %% FIXME queue unregister
+    %% FIXME queue unregister?
     {next_state, pending, State};
 pending(register, State) ->
-    %% FIXME queue register
+    %% FIXME queue register?
     {next_state, pending, State}.
 
 
@@ -201,19 +200,30 @@ handle_info({branch_result, Pid, Branch, _BranchState, #response{status=Status}=
 %% 	    {next_state, registered, State};
 
 	Status == 401; Status == 407 ->
-	    %% TODO * 1000
-	    Retry_after = siphelper:get_retry_after(Response) * 1,
+	    Lookup = fun(Realm, From, To) ->
+			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),
+			     {ok, "2001", "test"}
+		     end,
+	    {ok, Auths, Changed} = siphelper:update_authentications(Response, Lookup, State#state.auths),
 
-	    {ok, Request} = siphelper:add_authorization(State#state.reg_pending, Response),
-	    error_logger:info_msg("~p: Authenticate~n", [?MODULE]),
+	    Retry_after = siphelper:get_retry_after(Response) * 1000,
 
- 	    {ok, Retry_timer} = timer:send_after(Retry_after, {retry_reg, Request}),
-	    State1 = State#state{retry_timer=Retry_timer},
-	    {next_state, StateName, State1};
+	    error_logger:info_msg("~p: Authenticate ~p~n", [?MODULE, Changed]),
+
+	    case Changed of
+		false ->
+		    {stop, {siperror, Status, Response#response.reason}, State};
+		true ->
+		    Request = State#state.reg_pending,
+%% 		    {ok, Request1} = siphelper:add_authorization(Request, Auths),
+		    {ok, Retry_timer} = timer:send_after(Retry_after, {retry_reg, Request}),
+		    State1 = State#state{retry_timer=Retry_timer, auths=Auths},
+		    {next_state, StateName, State1}
+	    end;
 
 	% 403 Forbidden
 	Status >= 403  ->
-	    % TODO retry if stale nonce
+	    % TODO retry if stale nonce?
 	    error_logger:info_msg("~p: Forbidden ~n", [?MODULE]),
 	    {stop, {siperror, Status, Response#response.reason}, State};
 
@@ -279,11 +289,13 @@ do_send_register(Request, State) ->
     Header1 = keylist:set("CSeq", [lists:concat([CSeq, " ", Request#request.method])], Header), 
 
     Request1 = Request#request{header=Header1},
-    {ok, Pid, Branch} = siphelper:send_request(Request1),
+    {ok, Request2} = siphelper:add_authorization(Request1, State#state.auths),
+
+    {ok, Pid, Branch} = siphelper:send_request(Request2),
 
     error_logger:info_msg("~p: Send request ~p ~p~n", [?MODULE, Pid, Branch]),
 
-    State1 = State#state{reg_pending=Request1,
+    State1 = State#state{reg_pending=Request1,	% Save before adding Auths
 			 reg_branch=Branch,
 			 reg_pid=Pid,
 			 reg_cseqno=CSeq + 1

@@ -4,6 +4,7 @@
 -define(DEFAULT_RETRY_AFTER, 2).
 
 -include("siprecords.hrl").
+-include("sipclient.hrl").
 %% -include("sipsocket.hrl").
 %% -include("yate.hrl").
 %% -include("sdp.hrl").
@@ -12,6 +13,8 @@
 	 start_generate_request/5,
 	 send_request/1,
 	 send_response/3, send_response/4, send_response/5, send_response/6,
+	 update_authentications/3,
+	 update_authentications/5,
 	 add_authorization/2, print_auth_response/8, get_retry_after/1
 	]).
 
@@ -106,54 +109,165 @@ send_response(Request, Status, Reason, ExtraHeaders, Body, Contact) when is_reco
     ExtraHeaders1 = [{"Contact", [Contact]}] ++ ExtraHeaders,
     send_response(Request, Status, Reason, ExtraHeaders1, Body).
 
-%% -record(sipauth, {
-%% 	  type,
-%% 	  realm,
-%% 	  domain,
-%% 	  opaque,
-%% 	  stale,
-%% 	  algorithm,
-%% 	  qop,
-%% 	  username,
-%% 	  password
-%% 	 }).
 
-%% update_authentication(Auths, AuthHeader) ->
-%%     ok.
+%%
+%% update_authentications(Response, Lookup, Auths) -> Res
+%% Response = response()
+%% Lookup = fun(Realm, From, To) -> {ok, Username, Password}|noauth
+%% Realm = string()
+%% From = string()
+%% To = string()
+%% Username = string()
+%% Password = string()
+%% Auths = [sipauth()]
+%% Res = {ok, Auths, Changed}
+%% Changed = bool()
+%%
+update_authentications(Response, Lookup, Auths) when is_record(Response, response),
+						     is_list(Auths) ->
+    Proxy_auths = keylist:fetch('proxy-authenticate', Response#response.header),
+    {ok, Auths1, Changed1} = update_authentications('proxy-authenticate', Response, Proxy_auths, Lookup, Auths),
 
-%% update_authentication() ->
+    WWW_auths = keylist:fetch('www-authenticate', Response#response.header),
+    error_logger:info_msg("~p: update_authentications ~p~n", [?MODULE, WWW_auths]),
+    {ok, Auths2, Changed2} = update_authentications('www-authenticate', Response, WWW_auths, Lookup, Auths1),
+    {ok, Auths2, Changed1 or Changed2}.
+
+%%
+%% update_authentications(Type, AuthHdrs, Auths) -> Res
+%% Type = atom()
+%% AuthHdrs = [string()]
+%% Auths = [sipauth()]
+%% Res = {Auths, Changed}
+%% Changed = bool()
+%%
+update_authentications(Type, Response, AuthHdrs, Lookup, Auths) ->
+    update_authentications(Type, Response, AuthHdrs, Lookup, Auths, false).
+
+%%
+%% update_authentications(Type, AuthHdrs, Auths, Changed) -> Res
+%% Type = atom()
+%% AuthHdrs = [string()]
+%% Auths = [sipauth()]
+%% Changed = bool()
+%% Res = {ok, Auths, Changed}
+%%
+update_authentications(_Type, _Response, [], _Lookup, Auths, Changed) ->
+    {ok, Auths, Changed};
+update_authentications(Type, Response, [AuthHdr|R], Lookup, Auths, Changed) ->
+    error_logger:info_msg("~p: update_authentication ~p~n", [?MODULE, AuthHdr]),
+
+    AuthDict = sipheader:auth(AuthHdr),
+
+    Fun = fun(Auth, {Changed2, Found2}) ->
+		  {ok, Auth1, Changed3, Found3} = update_authentication(Type, AuthDict, Auth),
+		  {Auth1, {Changed2 or Changed3, Found2 or Found3}}
+	  end,
+%%     Fun = fun(X, Y) -> {X, Y} end,
+    
+    {Auths1, {Changed1, Found1}} =
+ 	lists:mapfoldl(Fun, {Changed, false}, Auths),
+
+    error_logger:info_msg("~p: update_authentication ~p ~p~n", [?MODULE, Changed1, Found1]),
+    {Auths2, Changed3} =
+	if
+	    not Found1 ->
+		SipAuth = sipauth_new(Type, Response, AuthDict, Lookup),
+		{[SipAuth | Auths1], true};
+	    true ->
+		{Auths1, Changed1}
+	end,
+    
+    update_authentications(Type, Response, R, Lookup, Auths2, Changed3).
 
 
-add_authorization(Request, Response) ->
-	    %% TODO fix looping
-%% 	    CSeq = State#state.invite_cseqno + 1,
-    CSeq = "Dummy",
-	    %% TODO loop auth list
-    Header = Request#request.header,
-    Proxy_auth = keylist:fetch('proxy-authenticate', Response#response.header),
-    {ok, Header1} = add_authorization2(Request, Proxy_auth, "Proxy-Authorization", Header),
+sipauth_new(Type, Response, AuthDict, Lookup) ->
+    %% Create new Auth record
+    %% Use Lookup
 
-    WWW_auth = keylist:fetch('www-authenticate', Response#response.header),
-    {ok, Header2} = add_authorization2(Request, WWW_auth, "Authorization", Header1),
-%%     Header2 = keylist:set("CSeq", [lists:concat([CSeq, " ", Method])], Header1), 
+    From = keylist:fetch('from', Response#response.header),
+    To = keylist:fetch('to', Response#response.header),
+    Realm = dict:fetch("realm", AuthDict),
+    Stale =
+	case dict:find("stale", AuthDict) of
+	    {ok, Stale1} ->
+		Stale1;
+	    error ->
+		false
+	end,
 
-    Request1 = Request#request{header=Header2},
-    {ok, Request1}.
+    {User, Pass} =
+	case Lookup(Realm, From, To) of
+	    {ok, User1, Pass1} ->
+		{User1, Pass1};
+	    noauth ->
+		{"anonymous", ""}
+	end,
+    #sipauth{type=Type, realm=Realm, dict=AuthDict, stale=Stale,
+	     username=User, password=Pass}.
 
-add_authorization2(Request, Auths, Name, Header) ->
-    case add_authorization2(Request, Auths, []) of
-	{ok, []} ->
-	    {ok, Header};
-	{ok, Header1} ->
-	    {ok, keylist:prepend({Name, Header1}, Header)}
+%%
+%% update_authentication(Type, AuthDict, Auth) -> Res
+%% Type = atom()
+%% AuthDict = dict()
+%% Auth = sipauth()
+%% Res = {ok, Auth, Changed=bool(), Found=bool()}
+%%
+update_authentication(Type, [], Auth) when is_atom(Type),
+					   is_list(Auth) ->
+    {ok, Auth, false, false};
+
+update_authentication(Type, AuthDict, #sipauth{type=Type,realm=Realm}=Auth) when is_atom(Type) ->
+    case dict:find("realm", AuthDict) of
+	{ok, Realm} ->
+	    %% TODO update
+	    Auth1 = Auth#sipauth{dict=AuthDict},
+	    Stale =
+		case dict:find("stale", AuthDict) of
+		    {ok, Stale1} ->
+			case httpd_util:to_lower(Stale1) of
+			    "false" ->
+				false;
+			    "true" ->
+				true
+			end;
+		    error ->
+			false
+		end,
+			
+	    {ok, Auth1, Stale, true};
+	{ok, Realm1} ->
+	    %% Realm not found or not matching
+	    error_logger:info_msg("~p: Not match ~p ~p~n", [?MODULE, Realm, Realm1]),
+	    {ok, Auth, false, false};
+	_ ->
+	    %% Realm not found or not matching
+	    error_logger:info_msg("~p: Not match, error ~p~n", [?MODULE, Realm]),
+	    {ok, Auth, false, false}
     end.
 
-add_authorization2(_Request, [], Headers) ->
-    {ok, Headers};
 
-add_authorization2(Request, [Auth|R], Headers) ->
-    Dict = sipheader:auth(Auth),
-    Realm = dict:fetch("realm", Dict),
+add_authorization(Request, Auths) when is_record(Request, request),
+				       is_list(Auths) ->
+    Header = Request#request.header,
+    add_authorization(Request, Auths, Header).
+
+add_authorization(Request, [], Header) when is_record(Request, request) ->
+    {ok, Request#request{header=Header}};
+
+add_authorization(Request, [Auth|R], Header) when is_record(Request, request), is_record(Auth, sipauth) ->
+
+    {ok, Header1} = add_authorization2(Request, Header, Auth),
+
+    add_authorization(Request, R, Header1).
+
+
+add_authorization2(Request, Header, Auth) when is_record(Request, request),
+					       is_record(Header, keylist),
+					       is_record(Auth, sipauth) ->
+    Type = Auth#sipauth.type,
+    Dict = Auth#sipauth.dict,
+    Realm = Auth#sipauth.realm,
     Nonce = dict:fetch("nonce", Dict),
     Method = Request#request.method,
     URIstr = sipurl:print(Request#request.uri),
@@ -163,12 +277,20 @@ add_authorization2(Request, [Auth|R], Headers) ->
 		 error ->
 		     ""
 	     end,
-    User = "2001",
-    Password = "testX",
+    User = Auth#sipauth.username,
+    Password = Auth#sipauth.password,
     
     Resp = sipauth:get_response(Nonce, Method, URIstr, User, Password, Realm),
     Resp_str = print_auth_response("Digest", User, Realm, URIstr, Resp, Nonce, Opaque, "MD5"),
-    add_authorization2(Request, R, [Resp_str|Headers]).
+
+    Name = case Type of
+	       'proxy-authenticate' ->
+		   "Proxy-Authorization";
+	       'www-authenticate' ->
+		   "Authorization"
+	   end,
+
+    {ok, keylist:prepend({Name, [Resp_str]}, Header)}.
 
 %%keylist:prepend({"Proxy-Authorization", [Resp_str]}, Request#request.header),
 
