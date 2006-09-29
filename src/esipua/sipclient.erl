@@ -785,9 +785,14 @@ reason_to_sipstatus(Reason) ->
 
 make() ->
     Modules = [
+	        "register_server",
+	        "register_sup",
 		"sdp",
 		"sipcall",
 		"sipclient",
+		"sipregister",
+	        "siptest",
+	        "siphelper",
 		"ysip_srv"
 	    ],
 

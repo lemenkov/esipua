@@ -15,10 +15,11 @@
 -behaviour(gen_fsm).
 
 
-%% api
--export([start_link/3, stop/0, call/4]).
+%% sipcall behaviour
+-export([behaviour_info/1]).
 
--export([make/0]).
+%% api
+-export([start_link/3, stop/1, call/3]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -29,17 +30,15 @@
 	 terminate/3]).
 
 -record(state, {dialog,				% SIP Dialog
+		module,				% Behaviour module
+		options,			% Behaviour options
 		invite,				% In/out INVITE request
 		invite_pid,			% In/out INVITE pid
 		invite_branch,			% Outgoing INVITE branch
-		invite_cseqno,			% Outgoing cseq
+		invite_cseqno=0,		% Outgoing cseq
+		invite_rseqno,			% Incoming rseqno
 		bye_branch,			% BYE branch id
 		bye_pid,			% BYE pid
-		client,				% Yate client
-		handle,				% Yate handle
-		call,				% Yate call
-		address,			% Remote RTP address
-		port,				% Remote RTP port
 		contact,			% Local contact
 		sdp_body			% Local sdp_body
 	       }).
@@ -48,17 +47,21 @@
 
 
 -export([init/0, request/3, response/3]).
--export([test/0, start_generate_request/5]).
+-export([build_invite/3, send_invite/2]).
 %%-export([call/1]).
 
 -include("siprecords.hrl").
 -include("sipsocket.hrl").
--include("yate.hrl").
 -include("sdp.hrl").
 
 -define(DEFAULT_TIMEOUT, 50).
 -define(HOST, "localhost").
 -define(PORT, 15062).
+
+behaviour_info(callbacks) ->
+    [{init, 1}];
+behaviour_info(_Other) ->
+    undefined.
 
 init() ->
     Server = {ysip_srv, {ysip_srv, start_link, [?HOST, ?PORT]},
@@ -68,7 +71,7 @@ init() ->
 
 request(#request{method="OPTIONS"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
     logger:log(normal, "sipclient: Options ~s", [LogStr]),
-    send_response(Request, 200, "Ok");
+    siphelper:send_response(Request, 200, "Ok");
 request(#request{method="INVITE"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
     ysip_srv:invite(Request, LogStr);
 request(_Request, _Origin, LogStr) ->
@@ -96,36 +99,10 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 %%
 %% outgoing yate call
 %%
-call(Client, Cmd, From, Args) when is_record(Cmd, command) ->
-    Id = command:fetch_key(id, Cmd),
-    start_link(Client, Id, Cmd, From, Args).
-
-test() ->
-    From = #contact{display_name = none,
-		    urlstr = "sip:referer@skinner:5080",
-		    contact_param = contact_param:to_norm([])
-		   },
-    To = #contact{display_name = none,
-		    urlstr = "sip:1002@mulder",
-		    contact_param = contact_param:to_norm([])
-		   },
-    Method = "OPTIONS",
-    SDP = [],
-    Contact = "sip:contact@localhost",
-    {ok, Request, _CallId, _FromTag} =
-	start_generate_request(Method,
-                               From,
-                               To,
-                               [{"Contact", [Contact]},
-                                {"Content-Type", ["application/sdp"]}
-                               ],
-                               list_to_binary(SDP)
-                              ),
-
-    {ok, _Pid, _Branch} = send_request(Request),
-
-    %%ok = sipdialog:register_dialog_controller(CallId, FromTag, self()),
-    ok.
+call(From, To, Body) when is_record(From, contact),
+			  is_record(To, contact),
+			  is_binary(Body) ->
+    start_link(From, To, Body).
 
 %%--------------------------------------------------------------------
 %% Function: generate_new_request(Method, State, Contact)
@@ -172,189 +149,101 @@ generate_new_request(Method, Dialog, Contact, CSeqNum) ->
     {ok, Request, Dialog}.
 
 
+%%
+%% build_invite
+%%
+build_invite(From, To, Body) when is_record(From, contact),
+				  is_record(To, contact),
+				  is_binary(Body) ->
+    {ok, Request, _CallId, _FromTag, CSeqNo} =
+	siphelper:start_generate_request("INVITE",
+                               From,
+                               To,
+                               [
+				{"Content-Type", ["application/sdp"]}
+                               ],
+			       Body
+                              ),
 
+    _State = #state{invite=Request,
+		   invite_cseqno=CSeqNo,
+		   sdp_body=Body},
+    {ok, Request}.
 
-%%--------------------------------------------------------------------
-%% Function: start_generate_request(Method, Referer, Referee, ExtraHeaders, Body)
-%%           Method       = string(), SIP method
-%%           Referer      = contact record()
-%%           Referee      = contact record()
-%%           ExtraHeaders = list() of {Key, ValueList} tuple()
-%%           Body         = binary(), request body
-%% Descrip.: Part of the startup functions. Build our initial request
-%%           record.
-%% Returns : {ok, Request, CallId, FromTag, CSeqNo}
-%%           Request = request record()
-%%           CallId  = string(), Call-Id of generated request
-%%           FromTag = string(), From-tag of generated request
-%%--------------------------------------------------------------------
-start_generate_request(Method, From, To, ExtraHeaders, Body) ->
-    FromTag = siputil:generate_tag(),
-    {Megasec, Sec, Microsec} = now(),
+send_invite(Call, Request) when is_pid(Call), is_record(Request, request) ->
+    gen_fsm:send_all_state_event(Call, {send_invite, Request}).
 
-    CallId = lists:concat([Megasec * 1000000 + Sec, "-", Microsec,
-			   "@", siprequest:myhostname()
-			  ]),
-    CSeq = 1,
+%% start_link(Request, LogStr) when is_record(Request, request) ->
+%%     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
+%%     gen_fsm:start_link(?MODULE, [Request, LogStr, self()], []).
 
-    FromContact = contact:add_param(From, "tag", FromTag),
-    Header = keylist:from_list([{"From",	[contact:print(FromContact)]},
-				{"To",		[contact:print(To)]},
-				{"Call-Id",	[CallId]},
-				{"CSeq",	[lists:concat([CSeq, " ", Method])]}
-			       ] ++ ExtraHeaders),
+start_link(Module, Args, Options) when is_atom(Module) ->
+    gen_fsm:start_link(?MODULE, [Module, Args, Options], Options);
 
-    URI = sipurl:parse(To#contact.urlstr),
-    Request1 = #request{method = Method, uri = URI, header = Header},
-    Request = siprequest:set_request_body(Request1, Body),
-
-    {ok, Request, CallId, FromTag, CSeq}.
-
-
-
-
-start_link(Client, Request, LogStr) ->
+start_link(From, To, Body) when is_record(From, contact),
+				is_record(To, contact),
+				is_binary(Body) ->
     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
-    gen_fsm:start_link(?MODULE, [Client, Request, LogStr, self()], []).
+    gen_fsm:start_link(?MODULE, [From, To, Body], []).
 
 
-start_link(Client, Id, Cmd, From, Args) ->
-    logger:log(normal, "sipclient: start_link ~p~n", [self()]),
-    gen_fsm:start_link(?MODULE, [Client, Id, Cmd, From, Args], []).
-
-
-adopt_transaction(THandler, Pid) ->
-    logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
-    ok = transactionlayer:change_transaction_parent(THandler, self(), Pid),
-    logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
-    ok.
-
-
-stop() ->
-    error.
+stop(Call) ->
+    gen_fsm:send_all_state_event(Call, stop).
 
 %%
 %% gen_fsm callbacks
 %%
-init([Client, Request, LogStr, OldPid]) ->
+init([Module, Args, Options]) when is_atom(Module) ->
+    case Module:init(Args) of
+	{ok, _SubState} ->
+	    {ok, start, #state{module=Module, options=Options}};
+	{stop, Reason} ->
+	    {stop, Reason};
+	ignore ->
+	    ignore
+    end;
+
+
+init([Request, LogStr, OldPid]) when is_record(Request, request) ->
     case transactionlayer:adopt_st_and_get_branchbase(Request) of
 	ignore ->
 	    {stop, {error, ignore}};
 	error ->
 	    {stop, error};
 	BranchBase ->
-	    init2(Client, Request, LogStr, BranchBase, OldPid)
+	    init2(Request, LogStr, BranchBase, OldPid)
     end;
 
-init([Client, _Id, Cmd, From, [SipUri]]) ->
-    {ok, Call} = yate_call:start_link(Client, Cmd),
-    {ok, Handle} = yate:open(Client),
 
-    NewCmd = command:append_keys([
-				  {callto, "dumb/"},
-				  {autoring, false}
-				 ],
-				 Cmd),
-    yate:ret(From, NewCmd, false),
+%% Outgoing call
+init([Request]) when is_record(Request, request) ->
+    ok.
 
-    Caller = case command:find_key(caller, Cmd) of
-		 {ok, Caller1} ->
-		     Caller1;
-		 error ->
-		     "anonymous"
-	     end,
-    CallerName = case command:find_key(callername, Cmd) of
-		     {ok, CallerName1} ->
-			 CallerName1;
-		     error ->
-			 none
-		 end,
 
-    CallerUri = "sip:" ++ Caller ++ "@192.168.0.7:5080",
 
-    FromHdr = #contact{display_name = CallerName,
-		       urlstr = CallerUri,
-		       contact_param = contact_param:to_norm([])
-		      },
-    ToHdr = #contact{display_name = none,
-		     urlstr = SipUri,
-		     contact_param = contact_param:to_norm([])
-		    },
-    Method = "INVITE",
-    Contact = CallerUri,
 
-    State = #state{client=Client,handle=Handle,call=Call,contact=Contact},
-    Body = <<>>,
-
-    {ok, Request, _CallId, _FromTag, CSeqNo} =
-	start_generate_request(Method,
-                               FromHdr,
-                               ToHdr,
-                               [{"Contact", [Contact]},
-                                {"Content-Type", ["application/sdp"]}
-                               ],
-			       Body
-                              ),
-
-    State2 = State#state{invite=Request, invite_cseqno=CSeqNo, sdp_body=Body},
-    {ok, outgoing, State2}.
-
-init2(Client, Request, LogStr, _BranchBase, OldPid) ->
-    {ok, Handle} = yate:open(Client),
+init2(Request, LogStr, _BranchBase, OldPid) ->
     logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
-    {ok, Address, Port} = parse_sdp(Request),
     THandler = transactionlayer:get_handler_for_request(Request),
     ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
     Invite_pid = transactionlayer:get_pid_from_handler(THandler),
-    State = #state{invite=Request, invite_pid=Invite_pid,
-		   handle=Handle, address=Address, port=Port,
-		   client=Client},
+    State = #state{invite=Request, invite_pid=Invite_pid},
 %%     {ok, _TRef} = timer:send_after(20000, timeout),
     execute(State).
 
-parse_sdp(Request) ->
-    Body = binary_to_list(Request#request.body),
-    {ok, Sdp} = sdp:parse(Body),
-    [Media|_] = Sdp#sdp.media,
-    Conn = case Media#sdp_media.connection of
-	undefined ->
-	    Sdp#sdp.connection;
-	Conn1 ->
-	    Conn1
-    end,
-    Address = Conn#sdp_connection.address,
-    Port = Media#sdp_media.port,
-    {ok, Address, Port}.
-
 execute(State) ->
-    Call_to = "dumb/",
-    Request = State#state.invite,
-    Uri = Request#request.uri,
-    Target = Uri#sipurl.user,
-    From = keylist:fetch('from', Request#request.header),
-    [FromContact] = contact:parse(From),
-    FromUri = sipurl:parse(FromContact#contact.urlstr),
-    Caller = FromUri#sipurl.user,
-    Caller_name = FromContact#contact.display_name,
-    catch case yate_call:execute_link(State#state.client,
-			       [
-				{caller, Caller},
-				{callername, Caller_name},
-				{callto, Call_to},
-				{target, Target}
-			       ]) of
-	{error, {noroute, Cmd}} ->
+    catch case a:'TODO'() of
+	{error, {noroute}} ->
 	    %% FIXME reason
 	    ok = send_response(State, 404, "Not Found"),
 	    {stop, normal};
-	{ok, Call} ->
-	    execute_finish(Call, State)
+	ok ->
+	    execute_finish(State)
     end.
 
-execute_finish(Call, State) ->
+execute_finish(State) ->
     ok = send_response(State, 101, "Dialog Establishment"),
-    State1 = State#state{call=Call},
-    {ok, State2} = setup(State1),
+    {ok, State2} = setup(State),
     {ok, incoming, State2}.
 
 
@@ -369,46 +258,6 @@ setup(State) ->
     {ok, State#state{contact=Contact,dialog=Dialog}}.
 
 
-get_sdp_body(State) ->
-    case State#state.sdp_body of
-	undefined ->
-	    {ok, State1} = start_rtp(State),
-	    {ok, State1, State1#state.sdp_body};
-	_ ->
-	    {ok, State, State#state.sdp_body}
-    end.
-
-start_rtp(State) ->
-    Call = State#state.call,
-    Remote_address = State#state.address,
-    Remote_port = State#state.port,
-    {ok, Localip, Localport} =
-	yate_call:start_rtp(Call, Remote_address, Remote_port),
-
-    {ok, Body} = create_sdp_body(Localip, Localport),
-    {ok, State#state{sdp_body=Body}}.
-
-start_rtp_receiver(State, Remote_addr) ->
-    Call = State#state.call,
-    {ok, Localip, Localport} =
-	yate_call:start_rtp(Call, Remote_addr),
-
-    {ok, Body} = create_sdp_body(Localip, Localport),
-    {ok, State#state{sdp_body=Body}}.
-
-create_sdp_body(Localip, Localport) ->
-    Seconds = integer_to_list(yate_util:seconds()),
-    Origin = #sdp_origin{username="-", session_id=Seconds, version=Seconds,
-			 network_type='IN', address_type='IP4',
-			 address=Localip},
-    Connection = #sdp_connection{network_type='IN', address_type='IP4',
-				 address = Localip},
-    Media = #sdp_media{media=audio, port=Localport, transport="RTP/AVP",
-		       fmts=[8], connection=Connection},
-    Sdp = #sdp{origin=Origin, session_name="Yxa", media=[Media]},
-    Body = list_to_binary(lists:flatten(sdp:print(Sdp))),
-    {ok, Body}.
-
 create_dialog(Request, Contact) ->
     THandler = transactionlayer:get_handler_for_request(Request),
     {ok, ToTag} = transactionlayer:get_my_to_tag(THandler),
@@ -417,33 +266,22 @@ create_dialog(Request, Contact) ->
     {ok, Dialog}.
 
 %% TODO move 200ok to separate process and retransmitt
-send_200ok(State) ->
-    {ok, State1, Body} = get_sdp_body(State),
-    ok = send_response(State1, 200, "Ok", [], Body),
-    {ok, State1}.
+%% send_200ok(State) ->
+%%     Body = "TODO",
+%%     ok = send_response(State, 200, "Ok", [], Body),
+%%     {ok, State}.
 
-send_response(Request, Status, Reason) ->
-    send_response(Request, Status, Reason, []).
 
-send_response(Request, Status, Reason, ExtraHeaders) ->
-    send_response(Request, Status, Reason, ExtraHeaders, <<>>).
+send_response(State, Status, Reason) when is_record(State, state) ->
+    siphelper:send_response(State, Status, Reason, []).
+
+send_response(State, Status, Reason, ExtraHeaders) when is_record(State, state) ->
+    siphelper:send_response(State, Status, Reason, ExtraHeaders, <<>>).
 
 send_response(State, Status, Reason, ExtraHeaders, Body) when is_record(State, state) ->
     Request = State#state.invite,
     Contact = State#state.contact,
-    send_response(Request, Status, Reason, ExtraHeaders, Body, Contact);
-send_response(Request, Status, Reason, ExtraHeaders, Body) when is_record(Request, request) ->
-    transactionlayer:send_response_request(Request, Status, Reason, ExtraHeaders, Body).
-
-
-send_response(Request, Status, Reason, ExtraHeaders, Body, undefined) when is_record(Request, request) ->
-    send_response(Request, Status, Reason, ExtraHeaders, Body);
-send_response(Request, Status, Reason, ExtraHeaders, Body, _Contact) when is_record(Request, request), Status > 299 ->
-    send_response(Request, Status, Reason, ExtraHeaders, Body);
-send_response(Request, Status, Reason, ExtraHeaders, Body, Contact) when is_record(Request, request), Status =< 299 ->
-    ExtraHeaders1 = [{"Contact", [Contact]}] ++ ExtraHeaders,
-    send_response(Request, Status, Reason, ExtraHeaders1, Body).
-
+    siphelper:send_response(Request, Status, Reason, ExtraHeaders, Body, Contact).
 
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
@@ -456,90 +294,36 @@ handle_sync_event(Event, _From, StateName, State) ->
 
 handle_event(stop, _StateName, State) ->
     {stop, normal, State};
+handle_event({send_invite, Request}, start, State) ->
+    case do_send_invite(Request, State) of
+	{ok, State1} ->
+	    {next_state, outgoing, State1};
+	{siperror, _Status1, _Reason1} ->
+	    {stop, normal, State};
+	R ->
+	    logger:log(normal, "send_request failed: ~p", [R]),
+	    {stop, normal, State}
+    end;
+
 handle_event(Request, StateName, State) ->
     error_logger:error_msg("Unhandled cast in ~p: ~p~n", [?MODULE, Request]),
     {next_state, StateName, State}.
 
 
-handle_info({yate_call, execute, Call}, outgoing=StateName, State=#state{call=Call}) ->
-    error_logger:info_msg("~p: execute ~p~n", [?MODULE, StateName]),
-    Remote_addr = "192.168.0.1",
-    {ok, State1} = start_rtp_receiver(State, Remote_addr),
-    Request = State1#state.invite,
-    Body = State1#state.sdp_body,
 
-    Request1 = siprequest:set_request_body(Request, Body),
-    {ok, Pid, Branch} = send_request(Request1),
-
-    State2 = State1#state{invite_branch=Branch,invite_pid=Pid,
-			  invite=Request1},
-    {next_state, StateName, State2};
-
-handle_info({yate_call, dialog, Call}, incoming=StateName, State=#state{call=Call}) ->
-    ok = send_response(State, 101, "Dialog Establishment"),
-    {next_state, StateName, State};
-
-handle_info({yate_call, ringing, Call}, incoming=StateName, State=#state{call=Call}) ->
-    %% FIXME send sdp if earlymedia=true
-    ok = send_response(State, 180, "Ringing"),
-    {next_state, StateName, State};
-
-handle_info({yate_call, progress, Call}, incoming=StateName, State=#state{call=Call}) ->
-    {ok, State1, Body} = get_sdp_body(State),
-    ok = send_response(State1, 183, "Session Progress", [], Body),
-    {next_state, StateName, State1};
-
-handle_info({yate_call, answered, Call}, incoming=_StateName, State=#state{call=Call}) ->
-    error_logger:info_msg("~p: autoanswer ~n", [?MODULE]),
-    {ok, State1} = send_200ok(State),
-    {next_state, up, State1};
-
-handle_info({yate_call, disconnected, Cmd, Call}, incoming=_StateName, State=#state{call=Call}) ->
-    YReason =
-	case command:find_key(reason, Cmd) of
-	    {ok, YReason1} ->
-		YReason1;
-	    _ ->
-		none
-	end,
-    error_logger:info_msg("~p: Call disconnect ~p~n", [?MODULE, YReason]),
-    Status = reason_to_sipstatus(YReason),
-
-    ok = send_response(State#state.invite, Status, YReason),
-    {stop, normal, State};
-
-handle_info({yate_call, disconnected, _Cmd, Call}, outgoing=StateName, State=#state{call=Call}) ->
-    %% TODO add reason beader
-    error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
-    Invite_pid = State#state.invite_pid,
-    ExtraHeaders = [],
-    Invite_pid ! {cancel, "hangup", ExtraHeaders},
-    {stop, normal, State};
-
-handle_info({yate_call, disconnected, _Cmd, Call}, up=StateName, State=#state{call=Call}) ->
-    error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
-    %% Send bye
-    {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
-					       State#state.contact),
-    {ok, Pid, Branch} = send_request(Bye),
-    State1 = State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch},
-    {next_state, bye_sent, State1};
-
-handle_info({yate_call, hangup, Call}, StateName, State=#state{call=Call}) ->
-    error_logger:info_msg("~p: Call hangup ~p ~p~n", [?MODULE, Call, StateName]),
-    {next_state, StateName, State};
 
 handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, incoming=_StateName, #state{invite_pid=Pid}=State) ->
+    %% TODO Send hangup
     logger:log(normal, "servertransaction_cancelled ~n", []),
-    ok = send_response(State#state.invite, 487, "Request Terminated"),
-    ok = yate_call:drop(State#state.call, "Cancelled"),
+    ok = siphelper:send_response(State#state.invite, 487, "Request Terminated"),
     {stop, normal, State};
 handle_info({servertransaction_terminating, Pid}, incoming=StateName, #state{invite_pid=Pid}=State) ->
+    %% Ignore
     logger:log(normal, "servertransaction_terminating ~n", []),
     {next_state, StateName, State};
 handle_info(timeout, incoming=StateName, State) ->
-    ok = send_response(State#state.invite, 408, "Request Timeout"),
-    ok = yate_call:drop(State#state.call, "Request Timeout"),
+    %% TODO Handle INVITE timeout
+    ok = siphelper:send_response(State#state.invite, 408, "Request Timeout"),
     {next_state, StateName, State};
 handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, bye_sent=StateName, #state{bye_pid = Pid, bye_branch = Branch} = State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
@@ -556,48 +340,12 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
             {next_state, StateName, State}
     end;
 handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, outgoing=StateName, #state{invite_pid = Pid, invite_branch = Branch} = State) ->
-    logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
-    Call = State#state.call,
-    if
-	%% TODO Handle all 101 <= Status <= 199
-	BranchState == proceeding, Status == 180 ->
-	    %% TODO Update dialog
-	    logger:log(normal, "Ringing: ~p ~p", [BranchState, Status]),
-	    ok = yate_call:ringing(Call),
-            {next_state, StateName, State};
-        BranchState == terminated, Status >= 200, Status =< 299 ->
-	    logger:log(normal, "Answered dialog: ~p ~p", [BranchState, Status]),
- 	    Request = State#state.invite,
-	    {ok, Dialog} =
-		sipdialog:create_dialog_state_uac(Request, Response),
-	    ok = sipdialog:register_dialog_controller(Dialog, self()),
-	    ok = yate_call:answer(Call),
-
-	    {ok, Ack, Dialog1} =
-		generate_new_request("ACK", Dialog, State#state.contact,
-				     State#state.invite_cseqno),
-	    {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(Ack),
-	    State1 = State#state{dialog=Dialog1},
-	    {next_state, up, State1};
-
-%%  	    {next_state, StateName, State};
-	BranchState == completed, Status >= 300, Status =< 399 ->
-	    %% TODO follow 3xx redirect?
-	    %% TODO add reason to drop
-	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
-	    ok = yate_call:drop(Call),
-            {stop, normal, State};
-	BranchState == completed, Status >= 400, Status =< 699 ->
-	    %% TODO follow 3xx redirect?
-	    %% TODO add reason to drop
-	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
-	    Reason = sipstatus_to_reason(Status),
-	    ok = yate_call:drop(Call, Reason),
-            {stop, normal, State};
-        true ->
-            logger:log(normal, "IGNORING response '~p ~p ~s' to my invite",
-		       [BranchState, Status, Response#response.reason]),
-            {next_state, StateName, State}
+    {Skip, State1} = pred_skip_resp(BranchState, Status, Response, State),
+    case Skip of
+	false ->
+	    handle_invite_result(Pid, Branch, BranchState, Response, StateName, State1);
+	true ->
+	    {next_state, StateName, State1}
     end;
 
 handle_info({new_response, #response{status=Status}=Response, Origin, _LogStr}, StateName, State) when is_record(Origin, siporigin) ->
@@ -627,7 +375,7 @@ handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State
 			%% answer BYE with 200 Ok
 			transactionlayer:send_response_handler(THandler, 200, "Ok"),
 			logger:log(normal, "Dialog ended by remote end (using BYE)"),
-			ok = yate_call:drop(State#state.call, "Normal Clearing"),
+			%% TODO send hangup
 			{stop, NewDialog1};
 		    _ ->
 			%% answer all unknown requests with 501 Not Implemented
@@ -642,6 +390,18 @@ handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State
         stop ->
             {stop, normal, State#state{dialog = NewDialog}}
     end;
+
+handle_info({retry_invite, Request}, StateName, State) ->
+    case do_send_invite(Request, State) of
+	{ok, State1} ->
+	    {next_state, StateName, State1};
+	{siperror, _Status1, _Reason1} ->
+	    {stop, normal, State};
+	R ->
+	    logger:log(normal, "send_request failed: ~p", [R]),
+	    {stop, normal, State}
+    end;
+
 handle_info(Info, StateName, State) ->
     error_logger:error_msg("~p: Unhandled info in ~p ~p~n",
 			   [?MODULE, Info, StateName]),
@@ -652,24 +412,112 @@ terminate(Reason, _StateName, _State) ->
     error_logger:error_msg("~p: Terminated ~p~n", [?MODULE, Reason]),
     terminated.
 
-%% send_request() ->
 
-send_request(Request) ->
-    Branch = siprequest:generate_branch(),
-    Route = keylist:fetch('route', Request#request.header),
-    TargetURI = Request#request.uri,
-    Dst = case Route of
-	      [] ->
-		  [Dst1 | _] = sipdst:url_to_dstlist(TargetURI, 500, TargetURI),
-		  Dst1;
-	      [FirstRoute | _] ->
-		  [FRC] = contact:parse([FirstRoute]),
-		  FRURL = sipurl:parse(FRC#contact.urlstr),
-		  [Dst1 | _] = sipdst:url_to_dstlist(FRURL, 500, TargetURI),
-		  Dst1
-	  end,
-    Pid = transactionlayer:start_client_transaction(Request, Dst, Branch, ?DEFAULT_TIMEOUT, self()),
-    {ok, Pid, Branch}.
+pred_skip_resp(BranchState, Status, Response, State) when BranchState == proceeding, Status >= 101, Status =< 199 ->
+%	    Request = Status#state.invite,
+    case sipheader:is_required("100rel", Response#response.header) of
+	true ->
+	    [Rseq_str] = keylist:fetch("rseq", Response#response.header),
+	    Rseq = list_to_integer(Rseq_str),
+	    
+	    logger:log(normal, "Rseq ~p ~p~n", [Rseq_str, Rseq]),
+	    if
+		State#state.invite_rseqno == undefined ->
+		    logger:log(normal, "undefined rseq~n", []),
+		    {ok, State1} = send_prack(Response, Rseq, State),
+		    {false, State1};
+		State#state.invite_rseqno + 1 == Rseq ->
+		    logger:log(normal, "Next rseq~n", []),
+		    {ok, State1} = send_prack(Response, Rseq, State),
+		    {false, State1};
+		true ->
+		    logger:log(normal, "Not next rseq~n", []),
+		    {true, State}
+	    end;
+	false ->
+	    logger:log(normal, "no 100rel~n", []),
+	    {false, State}
+    end;
+pred_skip_resp(_BranchState, _Status, _Response, State) ->
+    {false, State}.
+
+
+send_prack(Response, Rseq, State) ->
+    Dialog = create_dialog_state_uac(Response, State),
+    {ok, Request, NewDialog} = generate_new_request("PRACK", Dialog, State#state.contact),
+
+    Rack = lists:concat([Rseq, " ", State#state.invite_cseqno, " INVITE"]),
+    Header1 = keylist:set("RAck", [Rack], Request#request.header),
+    
+    {ok, _Pid, _Branch} = siphelper:send_request(Request#request{header=Header1}),
+    State1 = State#state{dialog=NewDialog, invite_rseqno=Rseq},
+
+    % TODO add Pid to outgoing pid list
+    {ok, State1}.
+
+
+create_dialog_state_uac(Response, State) ->
+    case State#state.dialog of
+	undefined ->
+	    {ok, Dialog1} =
+		sipdialog:create_dialog_state_uac(State#state.invite, Response),
+	    ok = sipdialog:register_dialog_controller(Dialog1, self()),
+	    Dialog1;
+	
+	Dialog1 ->
+	    Dialog1
+    end.
+    
+
+handle_invite_result(_Pid, _Branch, BranchState, #response{status=Status}=Response, StateName, State) ->
+    logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
+    if
+	%% TODO Handle all 101 <= Status <= 199
+	BranchState == proceeding, Status == 180 ->
+	    Dialog = create_dialog_state_uac(Response, State),
+	    %% TODO Send to
+	    State1 = State#state{dialog=Dialog},
+            {next_state, StateName, State1};
+        BranchState == terminated, Status >= 200, Status =< 299 ->
+	    logger:log(normal, "Answered dialog: ~p ~p", [BranchState, Status]),
+ 	    Request = State#state.invite,
+	    {ok, Dialog} =
+		sipdialog:create_dialog_state_uac(Request, Response),
+	    ok = sipdialog:register_dialog_controller(Dialog, self()),
+
+	    %% TODO send answered
+	    {ok, Ack, Dialog1} =
+		generate_new_request("ACK", Dialog, State#state.contact,
+				     State#state.invite_cseqno),
+	    {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(Ack),
+	    State1 = State#state{dialog=Dialog1},
+	    {next_state, up, State1};
+
+%%  	    {next_state, StateName, State};
+	BranchState == completed, Status >= 300, Status =< 399 ->
+            {stop, {siperror, Status, Response#response.reason}, State};
+
+	BranchState == completed, State#state.invite_cseqno == 1, Status == 401 orelse Status == 407 ->
+	    %% TODO add reason to drop
+	    %% TODO fix looping
+
+	    Retry_after = siphelper:get_retry_after(Response),
+
+	    {ok, Request} = siphelper:add_authorization(State#state.invite, Response),
+	    error_logger:info_msg("~p: Authenticate ~p ~p ~p~n", [?MODULE, Response, Request, Retry_after]),
+
+	    timer:send_after(Retry_after * 1000, {retry_invite, Request}),
+
+	    {next_state, StateName, State};
+
+	BranchState == completed, Status >= 400, Status =< 699 ->
+            {stop, {siperror, Status, Response#response.reason}, State};
+        true ->
+            logger:log(normal, "IGNORING response '~p ~p ~s' to my invite",
+		       [BranchState, Status, Response#response.reason]),
+            {next_state, StateName, State}
+    end.
+
 
 
 send_ack(Request) ->
@@ -698,104 +546,26 @@ send_ack(Request, Branch) ->
 	    error
     end.
 
-sipstatus_to_reason(401) ->
-    noauth;
-sipstatus_to_reason(403) ->
-    forbidden;
-sipstatus_to_reason(404) ->
-    noroute;
-%% sipstatus_to_reason(404) ->
-%%     offline;
-sipstatus_to_reason(406) ->
-    rejected;
-sipstatus_to_reason(415) ->
-    nomedia;
-sipstatus_to_reason(480) ->
-    congestion;
-sipstatus_to_reason(483) ->
-    looping;
-sipstatus_to_reason(481) ->
-    nocall;
-sipstatus_to_reason(484) ->
-    incomplete;
-sipstatus_to_reason(486) ->
-    busy;
-sipstatus_to_reason(487) ->
-    noanswer;
-sipstatus_to_reason(491) ->
-    pending;
-sipstatus_to_reason(Status) when Status >= 400, Status =< 499 ->
-    failure;
+do_send_invite(Request, State) ->
+    [Contact] = keylist:fetch('contact', Request#request.header),
 
-sipstatus_to_reason(503) ->
-    noconn;
-sipstatus_to_reason(Status) when Status >= 500, Status =< 599 ->
-    failure;
+    %% TODO set cseqno
 
-sipstatus_to_reason(603) ->
-    forbidden;
-sipstatus_to_reason(606) ->
-    rejected;
-sipstatus_to_reason(604) ->
-    noroute;
-sipstatus_to_reason(Status) when Status >= 600, Status =< 699 ->
-    busy.
+    Header = Request#request.header,
+    CSeq = State#state.invite_cseqno + 1,
+    Header1 = keylist:set("CSeq", [lists:concat([CSeq, " ", Request#request.method])], Header),
+    Request1 = Request#request{header=Header1},
 
-reason_to_sipstatus(incomplete) ->
-    484;
-reason_to_sipstatus(noroute) ->
-    404;
-reason_to_sipstatus(noconn) ->
-    503;
-reason_to_sipstatus(noauth) ->
-    401;
-reason_to_sipstatus(nomedia) ->
-    415;
-reason_to_sipstatus(nocall) ->
-    481;
-reason_to_sipstatus(busy) ->
-    486;
-reason_to_sipstatus(noanswer) ->
-    487;
-reason_to_sipstatus(rejected) ->
-    406;
-reason_to_sipstatus(forbidden) ->
-    403;
-reason_to_sipstatus(offline) ->
-    404;
-reason_to_sipstatus(congestion) ->
-    480;
-reason_to_sipstatus(failure) ->
-    500;
-reason_to_sipstatus(pending) ->
-    491;
-reason_to_sipstatus(looping) ->
-    483;
-reason_to_sipstatus(Reason) ->
-    error_logger:error_msg("~p: Unknown reason code '~p', returning 500~n",
-			   [?MODULE, Reason]),
-    500.
-
-%% {404, "Not Found"};
-%% {486, "Busy Here"};
-%% {403, "Forbidden"};
-%% {500, "Internal Server Error"}
-
-
-
-make() ->
-    Modules = [
-		"sdp",
-		"sipclient",
-		"ysip_srv"
-	    ],
-
-    Prefix = "../../../src/esipua/",
-    Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
-
-    make:files(Files,
-	       [load,
-		{i, "../../../include"},
-		{i, "/usr/lib/yxa/include"},
-		{outdir, "../../src/esipua"},
-		debug_info]).
+    case siphelper:send_request(Request1) of
+	{ok, Pid, Branch} ->
+	    
+	    State1 = State#state{invite_branch=Branch,
+				 invite_pid=Pid,
+				 invite=Request,
+				 invite_cseqno=CSeq,
+				 contact=Contact
+				},
+	    {ok, State1};
+	R ->
+	    R
+    end.
