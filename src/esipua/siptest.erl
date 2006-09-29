@@ -21,8 +21,7 @@ run() ->
     {ok, Call}.
 
 register() ->
-    
-    Aor = "sip:2001@skinner.hem.za.org",
+    Aor = get_aor(),
 
 %%     {ok, Request} = sipregister:build_register(Aor),
 %%     {ok, Call} = sipregister:start_link(Request),
@@ -31,10 +30,15 @@ register() ->
     ok.
 
 unregister() ->
-    Aor = "sip:2001@skinner.hem.za.org",
+    Aor = get_aor(),
 
     ok = register_server:unregister_aor(Aor),
     ok.
+
+get_aor() ->
+    "sip:2001@skinner.hem.za.org".
+%%      "sip:2001@mulder.hem.za.org".
+%%    "sip:105110603@phonzo.com".
 
 %%
 %% sipcall callbacks

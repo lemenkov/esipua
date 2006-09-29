@@ -190,6 +190,7 @@ handle_info({branch_result, Pid, Branch, _BranchState, #response{status=Status}=
 
 	% Success
 	Status >= 200, Status =< 299 ->
+	    %% FIXME use expires for first contact, to support NAT
 	    Expires = find_expires(State#state.contact_urlstr, Response),
 	    error_logger:info_msg("~p: Expires ~p~n", [?MODULE, Expires]),
 
@@ -226,7 +227,7 @@ handle_info({branch_result, Pid, Branch, _BranchState, #response{status=Status}=
 	Status == 401; Status == 407 ->
 	    Lookup = fun(Realm, From, To) ->
 			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),
-			     {ok, "2001", "test"}
+ 			     {ok, "2001", "test"}
 		     end,
 	    {ok, Auths, Changed} = siphelper:update_authentications(Response, Lookup, State#state.auths),
 
