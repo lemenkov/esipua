@@ -12,8 +12,8 @@
 %% api
 -export([
 	 start_link/0,
-	 find_child/1
-	 start_child/3,
+	 find_child/1,
+	 start_child/3
 	]).
 
 %% supervisor
