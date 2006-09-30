@@ -240,7 +240,6 @@ handle_info({branch_result, Pid, Branch, _BranchState, #response{status=Status}=
 		    {stop, {siperror, Status, Response#response.reason}, State};
 		true ->
 		    Request = State#state.reg_pending,
-%% 		    {ok, Request1} = siphelper:add_authorization(Request, Auths),
 		    {ok, Retry_timer} = timer:send_after(Retry_after, {retry_reg, Request}),
 		    State1 = State#state{retry_timer=Retry_timer, auths=Auths},
 		    {next_state, StateName, State1}
