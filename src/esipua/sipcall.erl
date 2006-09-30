@@ -48,12 +48,11 @@
 -record(state, {dialog,				% SIP Dialog
 		module,				% Behaviour module
 		options,			% Behaviour options
-		invite,				% In/out INVITE request
+		invite_req,			% In/out INVITE request
 		invite_pid,			% In/out INVITE pid
 		invite_branch,			% Outgoing INVITE branch
 		invite_cseqno=0,		% Outgoing cseq
 		invite_rseqno,			% Incoming rseqno
-		invite_pending,
 		bye_branch,			% BYE branch id
 		bye_pid,			% BYE pid
 		auths=[],
@@ -219,7 +218,7 @@ init2(Request, LogStr, _BranchBase, OldPid) ->
     THandler = transactionlayer:get_handler_for_request(Request),
     ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
     Invite_pid = transactionlayer:get_pid_from_handler(THandler),
-    State = #state{invite=Request, invite_pid=Invite_pid},
+    State = #state{invite_req=Request, invite_pid=Invite_pid},
 %%     {ok, _TRef} = timer:send_after(20000, timeout),
     execute(State).
 
@@ -240,7 +239,7 @@ execute_finish(State) ->
 
 
 setup(State) ->   
-    Request = State#state.invite,
+    Request = State#state.invite_req,
 
     %% FIXME Contact
     Contact = "<sip:dummy@192.168.0.7:5080>",
@@ -266,13 +265,13 @@ create_dialog(Request, Contact) ->
 
 
 send_response(State, Status, Reason) when is_record(State, state) ->
-    siphelper:send_response(State, Status, Reason, []).
+    send_response(State, Status, Reason, []).
 
 send_response(State, Status, Reason, ExtraHeaders) when is_record(State, state) ->
-    siphelper:send_response(State, Status, Reason, ExtraHeaders, <<>>).
+    send_response(State, Status, Reason, ExtraHeaders, <<>>).
 
 send_response(State, Status, Reason, ExtraHeaders, Body) when is_record(State, state) ->
-    Request = State#state.invite,
+    Request = State#state.invite_req,
     Contact = State#state.contact,
     siphelper:send_response(Request, Status, Reason, ExtraHeaders, Body, Contact).
 
@@ -289,7 +288,7 @@ handle_event(stop, _StateName, State) ->
     {stop, normal, State};
 handle_event({send_invite, Request}, start, State) ->
     [Contact] = keylist:fetch('contact', Request#request.header),
-    State0 = State#state{invite=Request, contact=Contact},
+    State0 = State#state{invite_req=Request, contact=Contact},
     case do_send_invite(Request, State0) of
 	{ok, State1} ->
 	    {next_state, outgoing, State1};
@@ -310,7 +309,7 @@ handle_event(Request, StateName, State) ->
 handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, incoming=_StateName, #state{invite_pid=Pid}=State) ->
     %% TODO Send hangup
     logger:log(normal, "servertransaction_cancelled ~n", []),
-    ok = siphelper:send_response(State#state.invite, 487, "Request Terminated"),
+    ok = send_response(State, 487, "Request Terminated"),
     {stop, normal, State};
 handle_info({servertransaction_terminating, Pid}, incoming=StateName, #state{invite_pid=Pid}=State) ->
     %% Ignore
@@ -318,7 +317,7 @@ handle_info({servertransaction_terminating, Pid}, incoming=StateName, #state{inv
     {next_state, StateName, State};
 handle_info(timeout, incoming=StateName, State) ->
     %% TODO Handle INVITE timeout
-    ok = siphelper:send_response(State#state.invite, 408, "Request Timeout"),
+    ok = send_response(State, 408, "Request Timeout"),
     {next_state, StateName, State};
 handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, bye_sent=StateName, #state{bye_pid = Pid, bye_branch = Branch} = State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
@@ -460,7 +459,7 @@ set_dialog_state_uac(Response, State) when is_record(Response, response),
     case State#state.dialog of
 	undefined ->
 	    {ok, Dialog1} =
-		sipdialog:create_dialog_state_uac(State#state.invite_pending, Response),
+		sipdialog:create_dialog_state_uac(State#state.invite_req, Response),
 	    ok = sipdialog:register_dialog_controller(Dialog1, self()),
 	    Dialog1;
 	
@@ -533,7 +532,7 @@ handle_invite_result(_Pid, _Branch, BranchState, #response{status=Status}=Respon
 		false ->
 		    {stop, {siperror, Status, Response#response.reason}, State};
 		true ->
-		    Request = State#state.invite_pending,
+		    Request = State#state.invite_req,
 		    {ok, Retry_timer} = timer:send_after(Retry_after, {retry_invite, Request}),
 		    State1 = State#state{retry_timer=Retry_timer, auths=Auths},
 		    {next_state, StateName, State1}
@@ -592,7 +591,7 @@ do_send_invite(Request, State) ->
 	    
 	    State1 = State#state{invite_branch=Branch,
 				 invite_pid=Pid,
-				 invite_pending=Request1,
+				 invite_req=Request1,
 				 invite_cseqno=CSeq,
 				 contact=Contact
 				},
