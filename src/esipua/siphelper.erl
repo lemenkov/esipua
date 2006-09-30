@@ -269,7 +269,12 @@ add_authorization2(Request, Header, Auth) when is_record(Request, request),
     Dict = Auth#sipauth.dict,
     Realm = Auth#sipauth.realm,
     Nonce = dict:fetch("nonce", Dict),
-    Method = Request#request.method,
+    Method = case Request#request.method of
+		 "ACK" ->
+		     "INVITE";
+		 Method1 ->
+		     Method1
+	     end,
     URIstr = sipurl:print(Request#request.uri),
     Opaque = case dict:find("opaque", Dict) of
 		 {ok, Opaque1} ->
