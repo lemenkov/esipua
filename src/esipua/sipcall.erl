@@ -13,13 +13,29 @@
 -module(sipcall).
 
 -behaviour(gen_fsm).
+%% -behaviour(yxa_app).
 
-
-%% sipcall behaviour
--export([behaviour_info/1]).
 
 %% api
--export([start_link/3, stop/1, call/3]).
+-export([
+	 start_link/3,
+	 stop/1,
+	 call/3,
+	 build_invite/3,
+	 send_invite/2
+%%call/1
+	]).
+
+%% YXA behaviour
+-export([
+%% 	 init/0,
+	 terminate/1,
+	 request/3,
+	 response/3
+	]).
+
+%% behaviour
+-export([behaviour_info/1]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -37,37 +53,38 @@
 		invite_branch,			% Outgoing INVITE branch
 		invite_cseqno=0,		% Outgoing cseq
 		invite_rseqno,			% Incoming rseqno
+		invite_pending,
 		bye_branch,			% BYE branch id
 		bye_pid,			% BYE pid
-		contact,			% Local contact
-		sdp_body			% Local sdp_body
+		auths=[],
+		retry_timer,
+		contact				% Local contact
 	       }).
 
--define(SERVER, ?MODULE).
 
-
--export([init/0, request/3, response/3]).
--export([build_invite/3, send_invite/2]).
-%%-export([call/1]).
 
 -include("siprecords.hrl").
 -include("sipsocket.hrl").
--include("sdp.hrl").
-
--define(DEFAULT_TIMEOUT, 50).
--define(HOST, "localhost").
--define(PORT, 15062).
 
 behaviour_info(callbacks) ->
     [{init, 1}];
 behaviour_info(_Other) ->
     undefined.
 
-init() ->
-    Server = {ysip_srv, {ysip_srv, start_link, [?HOST, ?PORT]},
-	      permanent, 2000, worker, [ysip_srv]},
-    Tables = [],
-    [Tables, stateful, {append, [Server]}].
+
+%%
+%% YXA behaviour implementation
+%%
+%% init() ->
+%%     Server = {ysip_srv, {ysip_srv, start_link, [?HOST, ?PORT]},
+%% 	      permanent, 2000, worker, [ysip_srv]},
+%%     Tables = [],
+%%     [Tables, stateful, {append, [Server]}].
+
+
+terminate(_Mode) ->
+    ok.
+
 
 request(#request{method="OPTIONS"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
     logger:log(normal, "sipclient: Options ~s", [LogStr]),
@@ -117,36 +134,14 @@ call(From, To, Body) when is_record(From, contact),
 %%--------------------------------------------------------------------
 
 generate_new_request(Method, Dialog, Contact) ->
-    {ok, CSeqNum, Dialog1} = sipdialog:get_next_local_cseq(Dialog),
-    generate_new_request(Method, Dialog1, Contact, CSeqNum).
+    ExtraHeaders = [{"Contact",  [Contact]}],
+    {ok, Request, Dialog1, _Dst} = sipdialog:generate_new_request(Method, ExtraHeaders, <<>>, Dialog),
+    {ok, Request, Dialog1}.
 
 generate_new_request(Method, Dialog, Contact, CSeqNum) ->
-    %% Figure out a bunch of parameters in ways that vary depending on if we have
-    [C] = contact:parse([Dialog#dialog.remote_target]),
-    Route = case Dialog#dialog.route_set of
-		[] ->
-		    [];
-		Route1 ->
-		    [{"Route", Route1}]
-	    end,
-    To = contact:new(none, Dialog#dialog.remote_uri,
-		[{"tag", Dialog#dialog.remote_tag}]),
-    logger:log(normal, "Remote URI: ~p", [To]),
-    TargetURI = sipurl:parse(C#contact.urlstr),
-    From = contact:new(none, Dialog#dialog.local_uri,
-			      [{"tag", Dialog#dialog.local_tag}]),
-    Header = keylist:from_list([{"From",        [contact:print(From)]},
-				{"To",          [contact:print(To)]},
-                                {"Call-Id",     [Dialog#dialog.callid]},
-                                {"CSeq",        [lists:concat([CSeqNum, " ", Method])]},
-				{"Contact",     [Contact]}
-                               |Route]),
-    Request1 = #request{method = Method,
-                        uri    = TargetURI,
-                        header = Header
-                       },
-    Request = siprequest:set_request_body(Request1, <<>>),
-    {ok, Request, Dialog}.
+    ExtraHeaders = [{"Contact",  [Contact]}],
+    {ok, Request, Dialog1, _Dst} = sipdialog:generate_new_request(Method, ExtraHeaders, <<>>, Dialog, CSeqNum),
+    {ok, Request, Dialog1}.
 
 
 %%
@@ -155,23 +150,20 @@ generate_new_request(Method, Dialog, Contact, CSeqNum) ->
 build_invite(From, To, Body) when is_record(From, contact),
 				  is_record(To, contact),
 				  is_binary(Body) ->
-    {ok, Request, _CallId, _FromTag, CSeqNo} =
+    {ok, Request, _CallId, _FromTag, _CSeqNo} =
 	siphelper:start_generate_request("INVITE",
                                From,
                                To,
                                [
-				{"Content-Type", ["application/sdp"]}
+				{"Content-Type", ["application/sdp"]},
+				{"Require", ["100rel"]}
                                ],
 			       Body
                               ),
-
-    _State = #state{invite=Request,
-		   invite_cseqno=CSeqNo,
-		   sdp_body=Body},
     {ok, Request}.
 
-send_invite(Call, Request) when is_pid(Call), is_record(Request, request) ->
-    gen_fsm:send_all_state_event(Call, {send_invite, Request}).
+send_invite(Pid, Request) when is_pid(Pid), is_record(Request, request) ->
+    gen_fsm:send_all_state_event(Pid, {send_invite, Request}).
 
 %% start_link(Request, LogStr) when is_record(Request, request) ->
 %%     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
@@ -187,8 +179,8 @@ start_link(From, To, Body) when is_record(From, contact),
     gen_fsm:start_link(?MODULE, [From, To, Body], []).
 
 
-stop(Call) ->
-    gen_fsm:send_all_state_event(Call, stop).
+stop(Pid) ->
+    gen_fsm:send_all_state_event(Pid, stop).
 
 %%
 %% gen_fsm callbacks
@@ -259,6 +251,7 @@ setup(State) ->
 
 
 create_dialog(Request, Contact) ->
+    throw({error, bad}),
     THandler = transactionlayer:get_handler_for_request(Request),
     {ok, ToTag} = transactionlayer:get_my_to_tag(THandler),
     {ok, Dialog} = sipdialog:create_dialog_state_uas(Request, ToTag, Contact),
@@ -295,7 +288,9 @@ handle_sync_event(Event, _From, StateName, State) ->
 handle_event(stop, _StateName, State) ->
     {stop, normal, State};
 handle_event({send_invite, Request}, start, State) ->
-    case do_send_invite(Request, State) of
+    [Contact] = keylist:fetch('contact', Request#request.header),
+    State0 = State#state{invite=Request, contact=Contact},
+    case do_send_invite(Request, State0) of
 	{ok, State1} ->
 	    {next_state, outgoing, State1};
 	{siperror, _Status1, _Reason1} ->
@@ -419,14 +414,16 @@ pred_skip_resp(BranchState, Status, Response, State) when BranchState == proceed
 	true ->
 	    [Rseq_str] = keylist:fetch("rseq", Response#response.header),
 	    Rseq = list_to_integer(Rseq_str),
+	    Inv_rseq = State#state.invite_rseqno,
+	    Dialog = State#state.dialog,
 	    
-	    logger:log(normal, "Rseq ~p ~p~n", [Rseq_str, Rseq]),
+	    logger:log(normal, "Rseq ~p ~p ~p~n", [Rseq_str, Rseq, Dialog]),
 	    if
-		State#state.invite_rseqno == undefined ->
+		Inv_rseq == undefined ->
 		    logger:log(normal, "undefined rseq~n", []),
 		    {ok, State1} = send_prack(Response, Rseq, State),
 		    {false, State1};
-		State#state.invite_rseqno + 1 == Rseq ->
+		Inv_rseq + 1 == Rseq ->
 		    logger:log(normal, "Next rseq~n", []),
 		    {ok, State1} = send_prack(Response, Rseq, State),
 		    {false, State1};
@@ -443,8 +440,10 @@ pred_skip_resp(_BranchState, _Status, _Response, State) ->
 
 
 send_prack(Response, Rseq, State) ->
-    Dialog = create_dialog_state_uac(Response, State),
+    Dialog = set_dialog_state_uac(Response, State),
     {ok, Request, NewDialog} = generate_new_request("PRACK", Dialog, State#state.contact),
+
+%%     throw({send_prack, Dialog, Request}),
 
     Rack = lists:concat([Rseq, " ", State#state.invite_cseqno, " INVITE"]),
     Header1 = keylist:set("RAck", [Rack], Request#request.header),
@@ -456,34 +455,55 @@ send_prack(Response, Rseq, State) ->
     {ok, State1}.
 
 
-create_dialog_state_uac(Response, State) ->
+set_dialog_state_uac(Response, State) when is_record(Response, response),
+					   is_record(State, state) ->
     case State#state.dialog of
 	undefined ->
 	    {ok, Dialog1} =
-		sipdialog:create_dialog_state_uac(State#state.invite, Response),
+		sipdialog:create_dialog_state_uac(State#state.invite_pending, Response),
 	    ok = sipdialog:register_dialog_controller(Dialog1, self()),
 	    Dialog1;
 	
 	Dialog1 ->
-	    Dialog1
+ 	    update_dialog_state_uac(Response, Dialog1)
     end.
-    
+
+
+update_dialog_state_uac(Response, Dialog) when is_record(Response, response),
+						is_record(Dialog, dialog) ->
+    %% Update route set of existing dialog
+    RHeader = Response#response.header,
+    Route = lists:reverse(keylist:fetch('record-route', RHeader)),
+    Dialog1 = Dialog#dialog{route_set=Route},
+    refresh_dialog_target_uac(Response, Dialog1).
+
+
+refresh_dialog_target_uac(Response, Dialog) when is_record(Response, response),
+						is_record(Dialog, dialog) ->
+    %% Update route set of existing dialog
+    RHeader = Response#response.header,
+    RemoteTarget =
+        case {Dialog#dialog.remote_target, keylist:fetch('contact', RHeader)} of
+	    {undefined, []} -> undefined;
+            {Contact1, []} -> Contact1;
+            {_, [Contact1]} -> Contact1
+        end,
+
+    Dialog#dialog{remote_target=RemoteTarget}.
+
 
 handle_invite_result(_Pid, _Branch, BranchState, #response{status=Status}=Response, StateName, State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
     if
 	%% TODO Handle all 101 <= Status <= 199
 	BranchState == proceeding, Status == 180 ->
-	    Dialog = create_dialog_state_uac(Response, State),
+	    Dialog = set_dialog_state_uac(Response, State),
 	    %% TODO Send to
 	    State1 = State#state{dialog=Dialog},
             {next_state, StateName, State1};
         BranchState == terminated, Status >= 200, Status =< 299 ->
 	    logger:log(normal, "Answered dialog: ~p ~p", [BranchState, Status]),
- 	    Request = State#state.invite,
-	    {ok, Dialog} =
-		sipdialog:create_dialog_state_uac(Request, Response),
-	    ok = sipdialog:register_dialog_controller(Dialog, self()),
+	    Dialog = set_dialog_state_uac(Response, State),
 
 	    %% TODO send answered
 	    {ok, Ack, Dialog1} =
@@ -501,14 +521,24 @@ handle_invite_result(_Pid, _Branch, BranchState, #response{status=Status}=Respon
 	    %% TODO add reason to drop
 	    %% TODO fix looping
 
-	    Retry_after = siphelper:get_retry_after(Response),
+	    Lookup = fun(Realm, From, To) ->
+			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),
+ 			     {ok, "2001", "test"}
+		     end,
+	    {ok, Auths, Changed} = siphelper:update_authentications(Response, Lookup, State#state.auths),
 
-	    {ok, Request} = siphelper:add_authorization(State#state.invite, Response),
-	    error_logger:info_msg("~p: Authenticate ~p ~p ~p~n", [?MODULE, Response, Request, Retry_after]),
+	    Retry_after = siphelper:get_retry_after(Response) * 1000,
 
-	    timer:send_after(Retry_after * 1000, {retry_invite, Request}),
-
-	    {next_state, StateName, State};
+	    case Changed of
+		false ->
+		    {stop, {siperror, Status, Response#response.reason}, State};
+		true ->
+		    Request = State#state.invite_pending,
+		    {ok, Retry_timer} = timer:send_after(Retry_after, {retry_invite, Request}),
+		    State1 = State#state{retry_timer=Retry_timer, auths=Auths},
+		    {next_state, StateName, State1}
+	    end;
+%% 	    {ok, Request} = siphelper:add_authorization(State#state.invite, Response),
 
 	BranchState == completed, Status >= 400, Status =< 699 ->
             {stop, {siperror, Status, Response#response.reason}, State};
@@ -555,13 +585,14 @@ do_send_invite(Request, State) ->
     CSeq = State#state.invite_cseqno + 1,
     Header1 = keylist:set("CSeq", [lists:concat([CSeq, " ", Request#request.method])], Header),
     Request1 = Request#request{header=Header1},
+    {ok, Request2} = siphelper:add_authorization(Request1, State#state.auths),
 
-    case siphelper:send_request(Request1) of
+    case siphelper:send_request(Request2) of
 	{ok, Pid, Branch} ->
 	    
 	    State1 = State#state{invite_branch=Branch,
 				 invite_pid=Pid,
-				 invite=Request,
+				 invite_pending=Request1,
 				 invite_cseqno=CSeq,
 				 contact=Contact
 				},
