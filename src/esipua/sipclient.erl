@@ -83,12 +83,13 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 	Status >= 200, Status =< 299 ->
 	    case sipdialog:get_dialog_controller(Response) of
 		{ok, Dc_pid} ->
-		    logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction, matching dialog ~p - dropping", [LogStr, Status, Reason, Dc_pid]);
+		    logger:log(normal, "sipcall: Response to ~s: '~p ~s', no matching transaction, matching dialog ~p - dropping", [LogStr, Status, Reason, Dc_pid]);
 		_ ->
-		    logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction, no matching dialog - dropping", [LogStr, Status, Reason])
+%% 		    logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction, no matching dialog - dropping X", [LogStr, Status, Reason]),
+		    sipcall:response(Response, Origin, LogStr)
 	    end;
 	true ->
-            logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction - dropping",
+            logger:log(normal, "sipcall: Response to ~s: '~p ~s', no matching transaction - dropping",
 		   [LogStr, Status, Reason])
     end,
     ok.
@@ -785,6 +786,7 @@ reason_to_sipstatus(Reason) ->
 
 make() ->
     Modules = [
+	        "callregister",
 	        "register_server",
 	        "register_sup",
 		"sdp",
