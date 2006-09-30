@@ -1,7 +1,7 @@
 -module(siphelper).
 
 -define(DEFAULT_TIMEOUT, 50).
--define(DEFAULT_RETRY_AFTER, 2).
+-define(DEFAULT_RETRY_AFTER, 1).
 
 -include("siprecords.hrl").
 -include("sipclient.hrl").
