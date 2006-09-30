@@ -154,8 +154,8 @@ build_invite(From, To, Body) when is_record(From, contact),
                                From,
                                To,
                                [
-				{"Content-Type", ["application/sdp"]},
-				{"Require", ["100rel"]}
+				{"Content-Type", ["application/sdp"]}
+%% 				{"Require", ["100rel"]}
                                ],
 			       Body
                               ),
