@@ -22,7 +22,9 @@
 	 stop/1,
 	 call/3,
 	 build_invite/3,
-	 send_invite/2
+	 send_invite/2,
+	 drop/1,
+	 drop/3
 %%call/1
 	]).
 
@@ -43,7 +45,12 @@
 	 handle_event/3,
 	 handle_sync_event/4,
 	 handle_info/3,
-	 terminate/3]).
+	 terminate/3,
+
+	 %% States
+	 incoming/2,
+	 outgoing/2,
+	 up/2]).
 
 -record(state, {dialog,				% Final SIP Dialog
 		owner,
@@ -181,6 +188,13 @@ start_link(From, To, Body) when is_record(From, contact),
     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
     gen_fsm:start_link(?MODULE, [From, To, Body], []).
 
+drop(Call) ->
+    gen_fsm:send_event(Call, drop).
+
+drop(Call, Status, Reason) when is_integer(Status),
+				is_list(Reason) ->
+    gen_fsm:send_event(Call, {drop, Status, Reason}).
+
 
 stop(Pid) ->
     gen_fsm:send_all_state_event(Pid, stop).
@@ -284,6 +298,36 @@ send_response(State, Status, Reason, ExtraHeaders, Body) when is_record(State, s
     Request = State#state.invite_req,
     Contact = State#state.contact,
     siphelper:send_response(Request, Status, Reason, ExtraHeaders, Body, Contact).
+
+
+outgoing(drop, State) ->
+    Invite_pid = State#state.invite_pid,
+    ExtraHeaders = [],
+    Invite_pid ! {cancel, "hangup", ExtraHeaders},
+
+    {stop, normal, State}.
+
+
+incoming(drop, State) ->
+    outgoing({drop, 403, "Forbidden"}, State);
+incoming({drop, Status, Reason}, State) when Status >= 400, Status =< 699 ->
+    ok = send_response(State, Status, Reason),
+    {stop, normal, State}.
+
+
+up(drop, State) ->
+    up({drop,  200, "Normal Clearing"}, State);
+up({drop, Status, Reason}, State) when Status >= 400, Status =< 699 ->
+    ExtraHeaders = [{"Reason", lists:concat(["SIP ;cause=", Status, " ;text=\"", Reason, "\""])}],
+    Dialog = State#state.dialog,
+
+    {ok, Bye, Dialog1} =
+	generate_new_request("BYE", Dialog, State#state.contact, ExtraHeaders),
+    {ok, Pid, Branch} = siphelper:send_request(Bye),
+
+    State1 = State#state{dialog=Dialog1, bye_pid=Pid, bye_branch=Branch},
+    {next_state, bye_sent, State1}.
+
 
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.

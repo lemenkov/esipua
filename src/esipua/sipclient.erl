@@ -150,6 +150,7 @@ init([]) ->
 
 
 init([Client, Request, LogStr, OldPid]) ->
+    process_flag(trap_exit, true),
     case transactionlayer:adopt_st_and_get_branchbase(Request) of
 	ignore ->
 	    {stop, {error, ignore}};
@@ -383,39 +384,17 @@ handle_info({yate_call, answered, Call}, incoming=_StateName, State=#state{call=
 %%     {ok, State1} = send_200ok(State),
     {next_state, up, State};
 
-handle_info({yate_call, disconnected, Cmd, Call}, incoming=_StateName, State=#state{call=Call}) ->
-    YReason =
-	case command:find_key(reason, Cmd) of
-	    {ok, YReason1} ->
-		YReason1;
-	    _ ->
-		none
+handle_info({yate_call, disconnected, Cmd, Call}, StateName, State=#state{call=Call}) ->
+    error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
+    SipCall = State#state.sip_call,
+    case command:find_key(reason, Cmd) of
+	{ok, YateReason} ->
+	    Status = reason_to_sipstatus(YateReason),
+	    ok = sipcall:drop(SipCall, Status, "FIXME");
+	_ ->
+	    ok = sipcall:drop(SipCall)
 	end,
-    error_logger:info_msg("~p: Call disconnect ~p~n", [?MODULE, YReason]),
-    %% FIXME drop sip_call
-%%     Status = reason_to_sipstatus(YReason),
-
-%%     ok = send_response(State#state.invite, Status, YReason),
     {stop, normal, State};
-
-handle_info({yate_call, disconnected, _Cmd, Call}, outgoing=StateName, State=#state{call=Call}) ->
-    %% TODO add reason beader
-    error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
-    %% FIXME drop sip_call
-%%     Invite_pid = State#state.invite_pid,
-%%     ExtraHeaders = [],
-%%     Invite_pid ! {cancel, "hangup", ExtraHeaders},
-    {stop, normal, State};
-
-handle_info({yate_call, disconnected, _Cmd, Call}, up=StateName, State=#state{call=Call}) ->
-    error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
-    %% Send bye
-    %% FIXME drop sip_call
-%%     {ok, Bye, NewDialog} = generate_new_request("BYE", State#state.dialog,
-%% 					       State#state.contact),
-%%     {ok, Pid, Branch} = send_request(Bye),
-%%     State1 = State#state{dialog=NewDialog,bye_pid=Pid,bye_branch=Branch},
-    {next_state, bye_sent, State};
 
 handle_info({yate_call, hangup, Call}, StateName, State=#state{call=Call}) ->
     error_logger:info_msg("~p: Call hangup ~p ~p~n", [?MODULE, Call, StateName]),
@@ -440,6 +419,26 @@ handle_info(timeout, incoming=StateName, State) ->
 %% new_request "BYE":
 %% ok = yate_call:drop(State#state.call, "Normal Clearing"),
 %% {stop, NewDialog1};
+
+handle_info({'EXIT', Pid, Reason}, _StateName, #state{sip_call=Pid}=State) ->
+    %% sip call terminated
+    case Reason of
+	{siperror, Status, _SipReason} ->
+	    Call = State#state.call,
+ 	    YateReason = sipstatus_to_reason(Status),
+	    ok = yate_call:drop(Call, YateReason),
+	    {stop, normal, State};
+	_ ->
+	    {stop, Reason}
+    end;
+
+handle_info({'EXIT', _Pid, normal}, StateName, State) ->
+    %% Ignore normal exit
+    {next_state, StateName, State};
+
+handle_info({'EXIT', _Pid, Reason}, _StateName, State) ->
+    %% Terminate with error
+    {stop, Reason, State};
 
 handle_info(Info, StateName, State) ->
     error_logger:error_msg("~p: Unhandled info in ~p ~p~n",
