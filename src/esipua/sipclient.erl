@@ -427,6 +427,11 @@ handle_info({call_ringing, SipCall, Response}, outgoing=StateName, #state{sip_ca
     ok = yate_call:ringing(Call),
     {next_state, StateName, State};
 
+handle_info({call_redirect, SipCall, Response}, outgoing=StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
+    Call = State#state.call,
+    ok = yate_call:drop(Call, forbidden),
+    {next_state, StateName, State};
+
 handle_info({'EXIT', Pid, Reason}, _StateName, #state{sip_call=Pid}=State) ->
     %% sip call terminated
     case Reason of

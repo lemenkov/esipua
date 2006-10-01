@@ -581,7 +581,8 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response
 	    logger:log(normal, "Answered dialog: ~p ~p", [BranchState, Status]),
 	    handle_invite_2xx(Pid, Branch, BranchState, Response, StateName, State);
 	BranchState == completed, Status >= 300, Status =< 399 ->
-            {stop, {siperror, Status, Response#response.reason}, State};
+	    Owner ! {call_redirect, self(), Response},
+            {stop, normal, State};
 
 	BranchState == completed, State#state.invite_cseqno == 1, Status == 401 orelse Status == 407 ->
 	    Lookup = fun(Realm, From, To) ->
