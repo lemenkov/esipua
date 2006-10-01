@@ -425,6 +425,12 @@ handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State
 			Owner = State#state.owner,
 			Owner ! {call_drop, self(), NewRequest},
 			{stop, NewDialog1};
+%% 		    "INVITE" ->
+%% 			%% reINVITE
+%% 			ok = send_response(State, 200, "Ok"),
+%% 			Owner = State#state.owner,
+%% 			Owner ! {call_request, self(), NewRequest},
+%% 			{next_state, NewDialog1};
 		    _ ->
 			%% answer all unknown requests with 501 Not Implemented
 			transactionlayer:send_response_handler(THandler, 501, "Not Implemented"),
