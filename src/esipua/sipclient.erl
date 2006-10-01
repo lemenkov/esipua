@@ -407,12 +407,7 @@ handle_info(timeout, incoming=StateName, State) ->
     {next_state, StateName, State};
 
 
-%%% 180 > ok = yate_call:ringing(Call),
 %%% 3xx > ok = yate_call:drop(Call), {stop, ..
-%% 4xx,5xx,6xx:
-%% 	    Reason = sipstatus_to_reason(Status),
-%% 	    ok = yate_call:drop(Call, Reason),
-%%             {stop, normal, State};
 %% 2xx:
 %% 	    ok = yate_call:answer(Call),
 %% 	    {next_state, up, State1};
@@ -426,6 +421,11 @@ handle_info({call_drop, SipCall, Response}, _StateName, #state{sip_call=SipCall}
     Reason = sipstatus_to_reason(Status),
     ok = yate_call:drop(Call, Reason),
     {stop, normal, State};
+
+handle_info({call_ringing, SipCall, Response}, outgoing=StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
+    Call = State#state.call,
+    ok = yate_call:ringing(Call),
+    {next_state, StateName, State};
 
 handle_info({'EXIT', Pid, Reason}, _StateName, #state{sip_call=Pid}=State) ->
     %% sip call terminated

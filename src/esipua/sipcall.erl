@@ -568,12 +568,14 @@ refresh_dialog_target_uac(Response, Dialog) when is_record(Response, response),
 
 handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response, StateName, State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
+    Owner = State#state.owner,
     if
 	%% TODO Handle all 101 <= Status <= 199
 	BranchState == proceeding, Status == 180 ->
 	    {_Dialog, State1} = need_dialog(Response, State),
 
-	    %% TODO Send to
+	    Owner ! {call_ringing, self(), Response},
+
             {next_state, StateName, State1};
         BranchState == terminated, Status >= 200, Status =< 299 ->
 	    logger:log(normal, "Answered dialog: ~p ~p", [BranchState, Status]),
@@ -602,7 +604,6 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response
 %% 	    {ok, Request} = siphelper:add_authorization(State#state.invite, Response),
 
 	BranchState == completed, Status >= 400, Status =< 699 ->
-	    Owner = State#state.owner,
 	    Owner ! {call_drop, self(), Response},
 
             {stop, normal, State};
