@@ -205,17 +205,23 @@ handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
     {ok, _RetValue, RetCmd} =
 	yate:send_msg(Handle, chan.masquerade,
 		      [
-		       {message, chan.attach},
+		       {message, chan.rtp},
 		       {id, Id},
 		       {notify, tag},
-		       {source, "rtp/*"},
- 		       {consumer, "rtp/*"},
+		       {transport, "RTP/AVP"},
+		       {direction, bidir},
+		       {media, audio},
 		       {remoteip, Remote_address},
 		       {remoteport, Remote_port},
 		       {format, Format}
 		      ]),
 
-    Localip = command:fetch_key(localip, RetCmd),
+    Localip = case command:find_key(localip, RetCmd) of
+		  {ok, Localip1} ->
+		      Localip1;
+		  error ->
+		      undefined
+	      end,
     Localport = list_to_integer(command:fetch_key(localport, RetCmd)),
 
 %%     case command:find_key(localport, RetCmd) of
