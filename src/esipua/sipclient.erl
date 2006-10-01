@@ -150,7 +150,6 @@ init([]) ->
 
 
 init([Client, Request, LogStr, OldPid]) ->
-    process_flag(trap_exit, true),
     case transactionlayer:adopt_st_and_get_branchbase(Request) of
 	ignore ->
 	    {stop, {error, ignore}};
@@ -432,18 +431,6 @@ handle_info({call_answered, SipCall, Response}, outgoing=StateName, #state{sip_c
     Call = State#state.call,
     ok = yate_call:answer(Call),
     {next_state, up, State};
-
-handle_info({'EXIT', Pid, Reason}, _StateName, #state{sip_call=Pid}=State) ->
-    %% sip call terminated
-    case Reason of
-	{siperror, Status, _SipReason} ->
-	    Call = State#state.call,
- 	    YateReason = sipstatus_to_reason(Status),
-	    ok = yate_call:drop(Call, YateReason),
-	    {stop, normal, State};
-	_ ->
-	    {stop, Reason}
-    end;
 
 handle_info({'EXIT', _Pid, normal}, StateName, State) ->
     %% Ignore normal exit
