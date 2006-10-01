@@ -18,4 +18,4 @@
   {mod, {sipserver, [sipclient]}},
   {env, []},
   {applications,
-        [kernel, stdlib, yate]}]}.
+        [kernel, stdlib, yate, yate_demo]}]}.
