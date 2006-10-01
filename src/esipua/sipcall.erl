@@ -30,7 +30,7 @@
 -export([
 %% 	 init/0,
 	 terminate/1,
-	 request/3,
+%% 	 request/3,
 	 response/3
 	]).
 
@@ -46,6 +46,7 @@
 	 terminate/3]).
 
 -record(state, {dialog,				% Final SIP Dialog
+		owner,
 		early_dialogs=[],		% List of early dialogs
 		module,				% Behaviour module
 		options,			% Behaviour options
@@ -83,16 +84,6 @@ behaviour_info(_Other) ->
 
 
 terminate(_Mode) ->
-    ok.
-
-
-request(#request{method="OPTIONS"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
-    logger:log(normal, "sipclient: Options ~s", [LogStr]),
-    siphelper:send_response(Request, 200, "Ok");
-request(#request{method="INVITE"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
-    ysip_srv:invite(Request, LogStr);
-request(_Request, _Origin, LogStr) ->
-    logger:log(normal, "sipclient: Request ~s", [LogStr]),
     ok.
 
 
@@ -182,7 +173,7 @@ send_invite(Pid, Request) when is_pid(Pid), is_record(Request, request) ->
 %%     gen_fsm:start_link(?MODULE, [Request, LogStr, self()], []).
 
 start_link(Module, Args, Options) when is_atom(Module) ->
-    gen_fsm:start_link(?MODULE, [Module, Args, Options], Options);
+    gen_fsm:start_link(?MODULE, [Module, Args, Options, self()], Options);
 
 start_link(From, To, Body) when is_record(From, contact),
 				is_record(To, contact),
@@ -197,10 +188,11 @@ stop(Pid) ->
 %%
 %% gen_fsm callbacks
 %%
-init([Module, Args, Options]) when is_atom(Module) ->
+init([Module, Args, Options, Owner]) when is_atom(Module) ->
     case Module:init(Args) of
 	{ok, _SubState} ->
-	    {ok, start, #state{module=Module, options=Options}};
+	    {ok, start, #state{module=Module, options=Options,
+			       owner=Owner}};
 	{stop, Reason} ->
 	    {stop, Reason};
 	ignore ->
@@ -541,9 +533,6 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response
             {stop, {siperror, Status, Response#response.reason}, State};
 
 	BranchState == completed, State#state.invite_cseqno == 1, Status == 401 orelse Status == 407 ->
-	    %% TODO add reason to drop
-	    %% TODO fix looping
-
 	    Lookup = fun(Realm, From, To) ->
 			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),
  			     {ok, "2001", "test"}
