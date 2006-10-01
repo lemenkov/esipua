@@ -33,9 +33,9 @@ yate_util.erl
 
 beam_FILES = $(erl_FILES:.erl=.beam)
 
-ebin_DATA = $(beam_FILES) yate.app yate.boot
-EXTRA_DIST = $(erl_FILES) yate.app-in yate.rel
-CLEANFILES = $(beam_FILES) yate.app yate.boot yate.script
+ebin_DATA = $(beam_FILES) yate.app yate.boot yate_demo.app yate_demo.boot
+EXTRA_DIST = $(erl_FILES) yate.app-in yate.rel yate_demo.app-in yate_demo.rel
+CLEANFILES = $(beam_FILES) yate.app yate.boot yate.script yate_demo.app yate_demo.boot yate_demo.script
 
 ERLFLAGS = 
 EFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include
