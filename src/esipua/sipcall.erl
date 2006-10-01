@@ -596,7 +596,8 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response
 
 	    case Changed of
 		false ->
-		    {stop, {siperror, Status, Response#response.reason}, State};
+		    Owner ! {call_drop, self(), Response},
+		    {stop, normal, State};
 		true ->
 		    Request = State#state.invite_req,
 		    {ok, Retry_timer} = timer:send_after(Retry_after, {retry_invite, Request}),
