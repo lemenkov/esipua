@@ -317,8 +317,9 @@ incoming({drop, Status, Reason}, State) when Status >= 400, Status =< 699 ->
 
 up(drop, State) ->
     up({drop,  200, "Normal Clearing"}, State);
-up({drop, Status, Reason}, State) when Status >= 400, Status =< 699 ->
-    ExtraHeaders = [{"Reason", lists:concat(["SIP ;cause=", Status, " ;text=\"", Reason, "\""])}],
+up({drop, Status, Reason}, State) when is_integer(Status),
+				       is_list(Reason) ->
+    ExtraHeaders = [{"Reason", [lists:concat(["SIP ;cause=", Status, " ;text=\"", Reason, "\""])]}],
     Dialog = State#state.dialog,
 
     {ok, Bye, Dialog1} =
