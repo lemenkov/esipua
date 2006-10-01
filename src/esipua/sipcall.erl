@@ -616,6 +616,7 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response
 
 
 handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, State) ->
+    Owner = State#state.owner,
     Early = State#state.early_dialogs,
     Dialog =
 	case find_dialog(Response, Early) of
@@ -628,11 +629,13 @@ handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, St
     Early1 = drop_dialog(Dialog, Early),
 
     %% FIXME wait 64T1 and drop early dialogs
-    %% TODO send answered
     {ok, Ack, Dialog1} =
 	generate_new_request("ACK", Dialog, State#state.contact,
 			     State#state.invite_cseqno),
     {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(Ack, State#state.auths),
+
+    Owner ! {call_answered, self(), Response},
+
     State1 = State#state{dialog=Dialog1, early_dialogs=Early1},
     {next_state, up, State1}.
 
