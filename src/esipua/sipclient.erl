@@ -435,9 +435,15 @@ handle_info({call_redirect, SipCall, Response}, outgoing=StateName, #state{sip_c
     ok = yate_call:drop(Call, forbidden),
     {next_state, StateName, State};
 
-handle_info({call_answered, SipCall, Response}, outgoing=StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
+handle_info({call_answered, SipCall, Response}, outgoing=_StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
     Call = State#state.call,
     ok = yate_call:answer(Call),
+
+    %% FIXME check reponse body
+    {ok, Remote_address, Remote_port} = parse_sdp(Response),
+
+    {ok, _Localip, _Localport} =
+	yate_call:start_rtp(Call, Remote_address, Remote_port),
     {next_state, up, State};
 
 handle_info({'EXIT', _Pid, normal}, StateName, State) ->
