@@ -417,6 +417,14 @@ handle_info({call_drop, SipCall, Response}, _StateName, #state{sip_call=SipCall}
     ok = yate_call:drop(Call, Reason),
     {stop, normal, State};
 
+handle_info({call_drop, SipCall, Request}, _StateName, #state{sip_call=SipCall}=State) when is_record(Request, request) ->
+    %% TODO check reason code
+    Call = State#state.call,
+%%     Status = Response#response.status,
+%%     Reason = sipstatus_to_reason(Status),
+    ok = yate_call:drop(Call), %, Reason),
+    {stop, normal, State};
+
 handle_info({call_ringing, SipCall, Response}, outgoing=StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
     Call = State#state.call,
     ok = yate_call:ringing(Call),

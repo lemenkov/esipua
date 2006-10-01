@@ -422,8 +422,8 @@ handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, State
 		    "BYE" ->                        
 			%% answer BYE with 200 Ok
 			transactionlayer:send_response_handler(THandler, 200, "Ok"),
-			logger:log(normal, "Dialog ended by remote end (using BYE)"),
-			%% TODO send hangup
+			Owner = State#state.owner,
+			Owner ! {call_drop, self(), NewRequest},
 			{stop, NewDialog1};
 		    _ ->
 			%% answer all unknown requests with 501 Not Implemented
