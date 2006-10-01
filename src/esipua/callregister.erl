@@ -10,7 +10,8 @@
 	 stop/0,
 	 register_call/2,
 	 unregister_call/1,
-	 find_call/1
+	 find_call/1,
+	 dump/0
 	]).
 
 %% gen_server callbacks
@@ -42,6 +43,9 @@ unregister_call(CallId) ->
 
 find_call(CallId) ->
     gen_server:call(?SERVER, {find_call, CallId}).
+
+dump() ->
+    gen_server:cast(?SERVER, dump).
 
 %%
 %% gen_server callbacks
@@ -75,6 +79,9 @@ handle_call(Request, _From, State) ->
 
 handle_cast(stop, State) ->
     {stop, normal, State};
+handle_cast(dump, State) ->
+    io:format("callregister ~n~p", [dict:to_list(State#state.calls)]),
+    {noreply, State};
 handle_cast(Request, State) ->
     error_logger:error_msg("Unhandled cast in ~p: ~p~n", [?MODULE, Request]),
     {noreply, State}.
