@@ -222,6 +222,7 @@ stop(Pid) ->
 %% gen_fsm callbacks
 %%
 init([Module, Args, Options, Owner]) when is_atom(Module) ->
+    logger:log(normal, "~p: ~p~n", [?MODULE, self()]),
     case Module:init(Args) of
 	{ok, _SubState} ->
 	    {ok, start, #state{module=Module, options=Options,
@@ -330,12 +331,21 @@ send_response(State, Status, Reason, ExtraHeaders, Body) when is_record(State, s
 
 
 start({receive_invite, Request, OldPid}, State) ->
-    THandler = transactionlayer:get_handler_for_request(Request),
-    ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
-    CallId = sipheader:callid(Request#request.header),
-    ok = callregister:register_call(CallId, self()),
-    State0 = State#state{invite_req=Request},
-    {next_state, incoming, State0}.
+    case transactionlayer:adopt_st_and_get_branchbase(Request) of
+	ignore ->
+	    {stop, {error, ignore}};
+	error ->
+	    {stop, error};
+	_BranchBase ->
+	    THandler = transactionlayer:get_handler_for_request(Request),
+	    Pid = transactionlayer:get_pid_from_handler(THandler),
+	    ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
+
+	    CallId = sipheader:callid(Request#request.header),
+	    ok = callregister:register_call(CallId, self()),
+	    State0 = State#state{invite_req=Request, invite_pid=Pid},
+	    {next_state, incoming, State0}
+    end.
 
 
 outgoing(drop, State) ->
@@ -406,10 +416,14 @@ handle_event(Request, StateName, State) ->
 
 
 
-handle_info({servertransaction_cancelled, Pid, _ExtraHeaders}, incoming=_StateName, #state{invite_pid=Pid}=State) ->
+handle_info({servertransaction_cancelled, Pid, ExtraHeaders}, incoming=_StateName, #state{invite_pid=Pid}=State) ->
     %% TODO Send hangup
-    logger:log(normal, "servertransaction_cancelled ~n", []),
+    logger:log(normal, "servertransaction_cancelled ~p~n", [ExtraHeaders]),
     ok = send_response(State, 487, "Request Terminated"),
+
+    Owner = State#state.owner,
+    Owner ! {call_drop, self(), ExtraHeaders},
+    
     {stop, normal, State};
 handle_info({servertransaction_terminating, Pid}, incoming=StateName, #state{invite_pid=Pid}=State) ->
     %% Ignore

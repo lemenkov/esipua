@@ -150,14 +150,7 @@ init([]) ->
 
 %% Incoming SIP call
 init([Client, Request, LogStr, OldPid]) ->
-    case transactionlayer:adopt_st_and_get_branchbase(Request) of
-	ignore ->
-	    {stop, {error, ignore}};
-	error ->
-	    {stop, error};
-	BranchBase ->
-	    init2(Client, Request, LogStr, BranchBase, OldPid)
-    end;
+    init2(Client, Request, LogStr, OldPid);
 
 init([Client, _Id, Cmd, From, [SipUri]]) ->
     {ok, Call} = yate_call:start_link(Client, Cmd),
@@ -206,7 +199,7 @@ init([Client, _Id, Cmd, From, [SipUri]]) ->
     {ok, outgoing, State2}.
 
 %% Incoming SIP call
-init2(Client, Request, LogStr, _BranchBase, OldPid) ->
+init2(Client, Request, LogStr, OldPid) ->
     {ok, Handle} = yate:open(Client),
     logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
     {ok, Address, Port} = parse_sdp(Request),
@@ -442,6 +435,15 @@ handle_info({call_drop, SipCall, Request}, _StateName, #state{sip_call=SipCall}=
 %%     Reason = sipstatus_to_reason(Status),
     ok = yate_call:drop(Call), %, Reason),
     {stop, normal, State};
+
+handle_info({call_drop, SipCall, ExtraHeaders}, _StateName, #state{sip_call=SipCall}=State) when is_list(ExtraHeaders) ->
+    %% TODO check reason code
+    Call = State#state.call,
+%%     Status = Response#response.status,
+%%     Reason = sipstatus_to_reason(Status),
+    ok = yate_call:drop(Call), %, Reason),
+    {stop, normal, State};
+
 
 handle_info({call_ringing, SipCall, Response}, outgoing=StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
     Call = State#state.call,
