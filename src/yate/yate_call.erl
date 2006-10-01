@@ -202,12 +202,11 @@ handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
     Handle = State#state.handle,
     Format = alaw,
 
-    {ok, _RetValue, RetCmd} =
+    {ok, RetValue, RetCmd} =
 	yate:send_msg(Handle, chan.masquerade,
 		      [
 		       {message, chan.rtp},
 		       {id, Id},
-		       {notify, tag},
 		       {transport, "RTP/AVP"},
 		       {direction, bidir},
 		       {media, audio},
@@ -216,22 +215,33 @@ handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
 		       {format, Format}
 		      ]),
 
-    Localip = case command:find_key(localip, RetCmd) of
-		  {ok, Localip1} ->
-		      Localip1;
-		  error ->
-		      undefined
-	      end,
-    Localport = list_to_integer(command:fetch_key(localport, RetCmd)),
+    Reply =
+	case RetValue of
+	    true ->
+		Localip =
+		    case command:find_key(localip, RetCmd) of
+			{ok, Localip1} ->
+			    Localip1;
+			error ->
+			    undefined
+		    end,
 
-%%     case command:find_key(localport, RetCmd) of
-%% 	{ok, Local_port} ->
-%% 	    logger:log(normal, "sipclient: local rtp port ~p", [Local_port]);
-%% 	_ ->
-%% 	    ok
-%%     end,
+		case command:find_key(localport, RetCmd) of
+		    {ok, Localport1} ->
+			case catch list_to_integer(Localport1) of
+			    Localport2 ->
+				{ok, Localip, Localport2};
+			    {'EXIT', Reason} ->
+				{error, Reason}
+			end;
+		    error ->
+			ok
+		end;
 
-    {reply, {ok, Localip, Localport}, State};
+	    false ->
+		{error, yate_error}
+	end,
+    {reply, Reply, State};
 
 handle_call({start_rtp, Remote_address}, _From, State) ->
     Id = State#state.id,
