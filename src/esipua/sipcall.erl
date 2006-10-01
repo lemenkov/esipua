@@ -268,6 +268,11 @@ create_dialog(Request, Contact) ->
 %%     ok = send_response(State, 200, "Ok", [], Body),
 %%     {ok, State}.
 
+%% adopt_transaction(THandler, Pid) ->
+%%     logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
+%%     ok = transactionlayer:change_transaction_parent(THandler, self(), Pid),
+%%     logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
+%%     ok.
 
 send_response(State, Status, Reason) when is_record(State, state) ->
     send_response(State, Status, Reason, []).
