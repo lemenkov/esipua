@@ -59,8 +59,10 @@
 init() ->
     Server = {ysip_srv, {ysip_srv, start_link, [?HOST, ?PORT]},
 	      permanent, 2000, worker, [ysip_srv]},
+    Callregister = {callregister, {callregister, start_link, []},
+		    permanent, 2000, worker, [callregister]},
     Tables = [],
-    [Tables, stateful, {append, [Server]}].
+    [Tables, stateful, {append, [Server, Callregister]}].
 
 request(#request{method="OPTIONS"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
     logger:log(normal, "sipclient: Options ~s", [LogStr]),
@@ -141,6 +143,12 @@ stop() ->
 %%
 %% gen_fsm callbacks
 %%
+
+%% sipcall
+init([]) ->
+    {ok, undefined};
+
+
 init([Client, Request, LogStr, OldPid]) ->
     case transactionlayer:adopt_st_and_get_branchbase(Request) of
 	ignore ->
@@ -169,6 +177,8 @@ init([Client, _Id, Cmd, From, [SipUri]]) ->
 		     "anonymous"
 	     end,
     CallerName = case command:find_key(callername, Cmd) of
+		     {ok, []} ->
+			 none;
 		     {ok, CallerName1} ->
 			 CallerName1;
 		     error ->
@@ -343,10 +353,10 @@ handle_info({yate_call, execute, Call}, outgoing=StateName, State=#state{call=Ca
     Body = State1#state.sdp_body,
 
     Request1 = siprequest:set_request_body(Request, Body),
-    {ok, Call} = sipcall:start_link(?MODULE, [], []),
-    ok = sipcall:send_invite(Call, Request1),
+    {ok, Sip_call} = sipcall:start_link(?MODULE, [], []),
+    ok = sipcall:send_invite(Sip_call, Request1),
 
-    State2 = State1#state{sip_call=Call,
+    State2 = State1#state{sip_call=Sip_call,
 			  invite=Request1},
     {next_state, StateName, State2};
 
