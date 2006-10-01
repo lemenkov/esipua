@@ -23,6 +23,9 @@
 	 call/3,
 	 build_invite/3,
 	 send_invite/2,
+	 receive_invite/3,
+	 answer/2,
+	 answer/3,
 	 drop/1,
 	 drop/3
 %%call/1
@@ -48,6 +51,7 @@
 	 terminate/3,
 
 	 %% States
+	 start/2,
 	 incoming/2,
 	 outgoing/2,
 	 up/2]).
@@ -175,6 +179,12 @@ build_invite(From, To, Body) when is_record(From, contact),
 send_invite(Pid, Request) when is_pid(Pid), is_record(Request, request) ->
     gen_fsm:send_all_state_event(Pid, {send_invite, Request}).
 
+receive_invite(Call, Request, OldPid) when is_pid(Call),
+					   is_record(Request, request),
+					   is_pid(OldPid) ->
+    gen_fsm:send_event(Call, {receive_invite, Request, OldPid}).
+
+
 %% start_link(Request, LogStr) when is_record(Request, request) ->
 %%     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
 %%     gen_fsm:start_link(?MODULE, [Request, LogStr, self()], []).
@@ -195,6 +205,15 @@ drop(Call, Status, Reason) when is_integer(Status),
 				is_list(Reason) ->
     gen_fsm:send_event(Call, {drop, Status, Reason}).
 
+
+answer(Call, Body) when is_pid(Call),
+			is_binary(Body) ->
+    answer(Call, Body, []).
+
+answer(Call, Body, ExtraHeaders) when is_pid(Call),
+				      is_binary(Body),
+				      is_list(ExtraHeaders) ->
+    ok = gen_fsm:send_event(Call, {answer, ExtraHeaders, Body}).
 
 stop(Pid) ->
     gen_fsm:send_all_state_event(Pid, stop).
@@ -282,22 +301,41 @@ create_dialog(Request, Contact) ->
 %%     ok = send_response(State, 200, "Ok", [], Body),
 %%     {ok, State}.
 
-%% adopt_transaction(THandler, Pid) ->
-%%     logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
-%%     ok = transactionlayer:change_transaction_parent(THandler, self(), Pid),
-%%     logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
-%%     ok.
 
-send_response(State, Status, Reason) when is_record(State, state) ->
+adopt_transaction(THandler, FromPid, ToPid) ->
+    logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
+    ok = transactionlayer:change_transaction_parent(THandler, FromPid, ToPid),
+    logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
+    ok.
+
+send_response(State, Status, Reason) when is_record(State, state),
+					  is_integer(Status),
+					  is_list(Reason) ->
     send_response(State, Status, Reason, []).
 
-send_response(State, Status, Reason, ExtraHeaders) when is_record(State, state) ->
+send_response(State, Status, Reason, ExtraHeaders) when is_record(State, state),
+							is_integer(Status),
+							is_list(Reason),
+							is_list(ExtraHeaders) ->
     send_response(State, Status, Reason, ExtraHeaders, <<>>).
 
-send_response(State, Status, Reason, ExtraHeaders, Body) when is_record(State, state) ->
+send_response(State, Status, Reason, ExtraHeaders, Body) when is_record(State, state),
+							      is_integer(Status),
+							      is_list(Reason),
+							      is_list(ExtraHeaders),
+							      is_binary(Body)  ->
     Request = State#state.invite_req,
     Contact = State#state.contact,
     siphelper:send_response(Request, Status, Reason, ExtraHeaders, Body, Contact).
+
+
+start({receive_invite, Request, OldPid}, State) ->
+    THandler = transactionlayer:get_handler_for_request(Request),
+    ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
+    CallId = sipheader:callid(Request#request.header),
+    ok = callregister:register_call(CallId, self()),
+    State0 = State#state{invite_req=Request},
+    {next_state, incoming, State0}.
 
 
 outgoing(drop, State) ->
@@ -312,7 +350,11 @@ incoming(drop, State) ->
     outgoing({drop, 403, "Forbidden"}, State);
 incoming({drop, Status, Reason}, State) when Status >= 400, Status =< 699 ->
     ok = send_response(State, Status, Reason),
-    {stop, normal, State}.
+    {next_state, incoming, State};
+incoming({answer, ExtraHeaders, Body}, State) when is_list(ExtraHeaders),
+						   is_binary(Body) ->
+    ok = send_response(State, 200, "Ok", ExtraHeaders, Body),
+    {next_state, up, State}.
 
 
 up(drop, State) ->
@@ -328,6 +370,7 @@ up({drop, Status, Reason}, State) when is_integer(Status),
 
     State1 = State#state{dialog=Dialog1, bye_pid=Pid, bye_branch=Branch},
     {next_state, bye_sent, State1}.
+
 
 
 code_change(_OldVsn, StateName, State, _Extra) ->

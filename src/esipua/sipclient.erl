@@ -148,7 +148,7 @@ stop() ->
 init([]) ->
     {ok, undefined};
 
-
+%% Incoming SIP call
 init([Client, Request, LogStr, OldPid]) ->
     case transactionlayer:adopt_st_and_get_branchbase(Request) of
 	ignore ->
@@ -205,17 +205,29 @@ init([Client, _Id, Cmd, From, [SipUri]]) ->
     State2 = State#state{invite=Request, sdp_body=Body},
     {ok, outgoing, State2}.
 
-init2(Client, Request, LogStr, _BranchBase, _OldPid) ->
+%% Incoming SIP call
+init2(Client, Request, LogStr, _BranchBase, OldPid) ->
     {ok, Handle} = yate:open(Client),
     logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
     {ok, Address, Port} = parse_sdp(Request),
 
+    {ok, SipCall} = sipcall:start_link(?MODULE, [], []),
+    ok = sipcall:receive_invite(SipCall, Request, OldPid),
+
     %% TODO handle incoming call, build sipcall Pid
-    State = #state{invite=Request,
+    State = #state{invite=Request, sip_call=SipCall,
 		   handle=Handle, address=Address, port=Port,
 		   client=Client},
 %%     {ok, _TRef} = timer:send_after(20000, timeout),
     execute(State).
+
+
+adopt_transaction(THandler, FromPid, ToPid) ->
+    logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
+    ok = transactionlayer:change_transaction_parent(THandler, FromPid, ToPid),
+    logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
+    ok.
+
 
 parse_sdp(Request) ->
     Body = binary_to_list(Request#request.body),
@@ -233,6 +245,7 @@ parse_sdp(Request) ->
 
 execute(State) ->
     Call_to = "dumb/",
+    SipCall = State#state.sip_call,
     Request = State#state.invite,
     Uri = Request#request.uri,
     Target = Uri#sipurl.user,
@@ -249,6 +262,8 @@ execute(State) ->
 				{target, Target}
 			       ]) of
 	{error, {noroute, _Cmd}} ->
+		  sipcall:drop(SipCall, 404, "Not Found"),
+
 	    %% FIXME reason, drop sip_call
 %% 	    ok = send_response(State, 404, "Not Found"),
 	    {stop, normal};
@@ -380,8 +395,11 @@ handle_info({yate_call, progress, Call}, incoming=StateName, State=#state{call=C
 handle_info({yate_call, answered, Call}, incoming=_StateName, State=#state{call=Call}) ->
     error_logger:info_msg("~p: autoanswer ~n", [?MODULE]),
     %% FIXME send answered to sip_call
-%%     {ok, State1} = send_200ok(State),
-    {next_state, up, State};
+
+    SipCall = State#state.sip_call,
+    {ok, State1, Body} = get_sdp_body(State),
+    ok = sipcall:answer(SipCall, Body),
+    {next_state, up, State1};
 
 handle_info({yate_call, disconnected, Cmd, Call}, StateName, State=#state{call=Call}) ->
     error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
