@@ -602,7 +602,10 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response
 %% 	    {ok, Request} = siphelper:add_authorization(State#state.invite, Response),
 
 	BranchState == completed, Status >= 400, Status =< 699 ->
-            {stop, {siperror, Status, Response#response.reason}, State};
+	    Owner = State#state.owner,
+	    Owner ! {call_drop, self(), Response},
+
+            {stop, normal, State};
         true ->
             logger:log(normal, "IGNORING response '~p ~p ~s' to my invite",
 		       [BranchState, Status, Response#response.reason]),

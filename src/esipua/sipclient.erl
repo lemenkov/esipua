@@ -420,6 +420,13 @@ handle_info(timeout, incoming=StateName, State) ->
 %% ok = yate_call:drop(State#state.call, "Normal Clearing"),
 %% {stop, NewDialog1};
 
+handle_info({call_drop, SipCall, Response}, _StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
+    Call = State#state.call,
+    Status = Response#response.status,
+    Reason = sipstatus_to_reason(Status),
+    ok = yate_call:drop(Call, Reason),
+    {stop, normal, State};
+
 handle_info({'EXIT', Pid, Reason}, _StateName, #state{sip_call=Pid}=State) ->
     %% sip call terminated
     case Reason of
