@@ -226,17 +226,14 @@ handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
 			    undefined
 		    end,
 
-		case command:find_key(localport, RetCmd) of
-		    {ok, Localport1} ->
-			case catch list_to_integer(Localport1) of
-			    Localport2 ->
-				{ok, Localip, Localport2};
-			    {'EXIT', Reason} ->
-				{error, Reason}
-			end;
-		    error ->
-			ok
-		end;
+		Localport =
+		    case command:find_key(localport, RetCmd) of
+			{ok, Localport1} ->
+			    list_to_integer(Localport1);
+			error ->
+			    undefined
+		    end,
+		{ok, Localip, Localport};
 
 	    false ->
 		{error, yate_error}
