@@ -114,7 +114,7 @@ setup(outgoing, Keys, State) ->
 	    State1 = State#state{id=Id,peerid=Peerid,status=outgoing},
 %% 	    {ok, State2} = setup(State1),
 	    ok = setup_watches(State1),
-	    Parent ! {yate_call, Auto, self()},
+	    Parent ! {yate_call, Auto, RetCmd, self()},
 	    {ok, State1}
     end.
 
