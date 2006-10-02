@@ -72,6 +72,7 @@ stop(Call) ->
 %% gen_server callbacks
 %%
 init([Client, Cmd, Parent]) when is_record(Cmd, command) ->
+    error_logger:info_msg("~p: ~p ~p~n", [?MODULE, self(), incoming]),
     process_flag(trap_exit, true),
     link(Parent),
     {ok, Handle} = yate:open(Client),
@@ -80,6 +81,7 @@ init([Client, Cmd, Parent]) when is_record(Cmd, command) ->
     setup(Status, Cmd, State0);
 
 init([Client, Keys, Parent]) when is_list(Keys) ->
+    error_logger:info_msg("~p: ~p ~p~n", [?MODULE, self(), outgoing]),
     process_flag(trap_exit, true),
     link(Parent),
     {ok, Handle} = yate:open(Client),
@@ -111,6 +113,7 @@ setup(outgoing, Keys, State) ->
 	    Peerid = command:fetch_key(peerid, RetCmd),
 	    State1 = State#state{id=Id,peerid=Peerid,status=outgoing},
 %% 	    {ok, State2} = setup(State1),
+	    ok = setup_watches(State1),
 	    Parent ! {yate_call, Auto, self()},
 	    {ok, State1}
     end.
@@ -291,6 +294,7 @@ handle_cast(Request, State) ->
 
 
 handle_info({yate, Dir, Cmd, From}, State) ->
+    error_logger:error_msg("~p:received cmd ~p~n", [?MODULE, self()]),
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
 handle_info({'EXIT', Pid, Reason}, State=#state{parent=Pid}) ->
     error_logger:error_msg("Do drop ~p ~p~n", [?MODULE, Reason]),
@@ -317,6 +321,7 @@ terminate(Reason, State) ->
 
 handle_command(message, Dir, Cmd, From, State) ->
     Name = (Cmd#command.header)#message.name,
+    error_logger:error_msg("~p:received ~p ~p ~p~n", [?MODULE, self(), Name, Dir]),
     handle_message(Name, Dir, Cmd, From, State).
 
 
@@ -327,6 +332,18 @@ handle_message(call.execute, ans, Cmd, _From, State) ->
     Parent = State#state.parent,
     Parent ! {yate_call, execute, self()},
     {noreply, State1};
+handle_message(call.ringing, ans, Cmd, _From, State) ->
+    Parent = State#state.parent,
+    Parent ! {yate_call, ringing, Cmd, self()},
+    {noreply, State};
+handle_message(call.progress, ans, Cmd, _From, State) ->
+    Parent = State#state.parent,
+    Parent ! {yate_call, progress, Cmd, self()},
+    {noreply, State};
+handle_message(call.answered, ans, Cmd, _From, State) ->
+    Parent = State#state.parent,
+    Parent ! {yate_call, answered, Cmd, self()},
+    {noreply, State};
 handle_message(chan.disconnected, ans, Cmd, _From, State) ->
     Parent = State#state.parent,
     Parent ! {yate_call, disconnected, Cmd, self()},
