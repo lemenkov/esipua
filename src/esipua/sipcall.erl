@@ -24,6 +24,7 @@
 	 build_invite/3,
 	 send_invite/2,
 	 receive_invite/3,
+	 proceeding/3,
 	 answer/2,
 	 answer/3,
 	 drop/1,
@@ -202,8 +203,18 @@ drop(Call) ->
     gen_fsm:send_event(Call, drop).
 
 drop(Call, Status, Reason) when is_integer(Status),
+				Status >= 400,
+				Status =< 699,
 				is_list(Reason) ->
     gen_fsm:send_event(Call, {drop, Status, Reason}).
+
+
+proceeding(Call, Status, Reason) when is_pid(Call),
+				      is_integer(Status),
+				      Status >= 101,
+				      Status =< 199,
+				      is_list(Reason) ->
+    gen_fsm:send_event(Call, {proceeding, Status, Reason}).
 
 
 answer(Call, Body) when is_pid(Call),
@@ -282,6 +293,7 @@ setup(State) ->
 
     %% FIXME Contact
     Contact = "<sip:dummy@192.168.0.7:5080>",
+    throw(setup),
     {ok, Dialog} = create_dialog(Request, Contact),
 
 %%     {ok, State1b} = startup(State, Id),
@@ -289,7 +301,6 @@ setup(State) ->
 
 
 create_dialog(Request, Contact) ->
-    throw({error, bad}),
     THandler = transactionlayer:get_handler_for_request(Request),
     {ok, ToTag} = transactionlayer:get_my_to_tag(THandler),
     {ok, Dialog} = sipdialog:create_dialog_state_uas(Request, ToTag, Contact),
@@ -342,8 +353,14 @@ start({receive_invite, Request, OldPid}, State) ->
 	    ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
 
 	    CallId = sipheader:callid(Request#request.header),
+
+	    %% FIXME Contact
+	    Contact = "<sip:dummy@192.168.0.7:5080>",
+	    {ok, Dialog} = create_dialog(Request, Contact),
+
 	    ok = callregister:register_call(CallId, self()),
-	    State0 = State#state{invite_req=Request, invite_pid=Pid},
+	    State0 = State#state{invite_req=Request, invite_pid=Pid,
+				contact=Contact, dialog=Dialog},
 	    {next_state, incoming, State0}
     end.
 
@@ -358,7 +375,16 @@ outgoing(drop, State) ->
 
 incoming(drop, State) ->
     outgoing({drop, 403, "Forbidden"}, State);
-incoming({drop, Status, Reason}, State) when Status >= 400, Status =< 699 ->
+incoming({drop, Status, Reason}, State) when is_integer(Status),
+						   Status >= 400,
+						   Status =< 699,
+						   is_list(Reason) ->
+    ok = send_response(State, Status, Reason),
+    {next_state, incoming, State};
+incoming({proceeding, Status, Reason}, State) when is_integer(Status),
+						   Status >= 101,
+						   Status =< 199,
+						   is_list(Reason) ->
     ok = send_response(State, Status, Reason),
     {next_state, incoming, State};
 incoming({answer, ExtraHeaders, Body}, State) when is_list(ExtraHeaders),
