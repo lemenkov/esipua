@@ -178,7 +178,7 @@ init([Client, _Id, Cmd, From, [SipUri]]) ->
 			 none
 		 end,
 
-    CallerUri = "sip:" ++ Caller ++ "@192.168.0.7:5080",
+    CallerUri = "sip:" ++ Caller ++ "@192.168.0.2:5080",
 
     FromHdr = #contact{display_name = CallerName,
 		       urlstr = CallerUri,
@@ -274,7 +274,7 @@ execute_finish(Call, State) ->
 
 setup(State) ->   
     %% FIXME Contact
-    Contact = "<sip:dummy@192.168.0.7:5080>",
+    Contact = "<sip:dummy@192.168.0.2:5080>",
 
 %%     {ok, State1b} = startup(State, Id),
     {ok, State#state{contact=Contact}}.

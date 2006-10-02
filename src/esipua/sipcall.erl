@@ -353,14 +353,20 @@ start({receive_invite, Request, OldPid}, State) ->
 	    ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
 
 	    CallId = sipheader:callid(Request#request.header),
+	    {_DisplayName, ToURI} = sipheader:to(Request#request.header),
 
 	    %% FIXME Contact
-	    Contact = "<sip:dummy@192.168.0.7:5080>",
-	    {ok, Dialog} = create_dialog(Request, Contact),
+	    Contact_url = sipurl:new([{proto, "sip"},
+				      {user, ToURI#sipurl.user},
+				      {host, siphost:myip()},
+				      {port, sipsocket:get_listenport(udp)}]),
+	    Contact = contact:new(Contact_url),
+	    Contact_str = contact:print(Contact),
+	    {ok, Dialog} = create_dialog(Request, Contact_str),
 
 	    ok = callregister:register_call(CallId, self()),
 	    State0 = State#state{invite_req=Request, invite_pid=Pid,
-				contact=Contact, dialog=Dialog},
+				contact=Contact_str, dialog=Dialog},
 	    {next_state, incoming, State0}
     end.
 
