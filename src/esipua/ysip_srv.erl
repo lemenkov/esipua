@@ -38,6 +38,10 @@ invite(Request, LogStr) ->
 init([Host, Port]) ->
     {ok, Client} = yate:connect(Host, Port),
     {ok, Handle} = yate:open(Client),
+
+    %% Need to setup watches now, since 
+    %% otherwise there won't be enough time in sipclient
+    setup_watches(Handle),
     {ok, #state{client=Client, handle=Handle}}.
 
 
@@ -69,3 +73,31 @@ handle_info(Info, State) ->
 
 terminate(_Reason, _State) ->
     terminated.
+
+
+setup_watches(Handle) ->
+    ok = yate:watch(Handle, chan.disconnected,
+		    fun(_Cmd) ->
+			    false
+		    end),
+    ok = yate:watch(Handle, call.ringing,
+		    fun(_Cmd) ->
+			    false
+		    end),
+    ok = yate:watch(Handle, chan.hangup,
+		    fun(_Cmd) ->
+			    false
+		    end),
+    ok = yate:watch(Handle, call.progress,
+		    fun(_Cmd) ->
+			    false
+		    end),
+    ok = yate:watch(Handle, call.answered,
+		    fun(_Cmd) ->
+			    false
+		    end),
+    ok = yate:watch(Handle, call.drop,
+		    fun(_Cmd) ->
+			    false
+		    end),
+    ok.
