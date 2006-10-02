@@ -28,7 +28,7 @@
 	 handle_info/3,
 	 terminate/3]).
 
--record(state, {dialog,				% SIP Dialog
+-record(state, {
 		invite,				% INVITE request
 		sip_call,			% SIP call (Pid)
 		client,				% Yate client
@@ -273,14 +273,11 @@ execute_finish(Call, State) ->
 
 
 setup(State) ->   
-    Request = State#state.invite,
-
     %% FIXME Contact
     Contact = "<sip:dummy@192.168.0.7:5080>",
-    {ok, Dialog} = create_dialog(Request, Contact),
 
 %%     {ok, State1b} = startup(State, Id),
-    {ok, State#state{contact=Contact,dialog=Dialog}}.
+    {ok, State#state{contact=Contact}}.
 
 
 get_sdp_body(State) ->
@@ -373,20 +370,20 @@ handle_info({yate_call, dialog, Call}, incoming=StateName, State=#state{call=Cal
 %%     ok = send_response(State, 101, "Dialog Establishment"),
     {next_state, StateName, State};
 
-handle_info({yate_call, ringing, Call}, incoming=StateName, State=#state{call=Call}) ->
+handle_info({yate_call, ringing, _Cmd, Call}, incoming=StateName, State=#state{call=Call}) ->
     %% FIXME send sdp if earlymedia=true
-    %% FIXME send 180 to sip_call
-%%     ok = send_response(State, 180, "Ringing"),
+    SipCall = State#state.sip_call,
+    ok = sipcall:proceeding(SipCall, 180, "Ringing"),
     {next_state, StateName, State};
 
-handle_info({yate_call, progress, Call}, incoming=StateName, State=#state{call=Call}) ->
+handle_info({yate_call, progress, _Cmd, Call}, incoming=StateName, State=#state{call=Call}) ->
     %% FIXME send 183 to sip_call
 %%     {ok, State1, Body} = get_sdp_body(State),
 %%     ok = send_response(State1, 183, "Session Progress", [], Body),
     {next_state, StateName, State};
 
-handle_info({yate_call, answered, Call}, incoming=_StateName, State=#state{call=Call}) ->
-    error_logger:info_msg("~p: autoanswer ~n", [?MODULE]),
+handle_info({yate_call, answered, _Cmd, Call}, incoming=_StateName, State=#state{call=Call}) ->
+    error_logger:info_msg("~p: answer ~n", [?MODULE]),
     %% FIXME send answered to sip_call
 
     SipCall = State#state.sip_call,
