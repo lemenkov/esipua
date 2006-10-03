@@ -15,7 +15,8 @@
 	 send_response/3, send_response/4, send_response/5, send_response/6,
 	 update_authentications/3,
 	 update_authentications/5,
-	 add_authorization/2, print_auth_response/8, get_retry_after/1
+	 add_authorization/2, print_auth_response/8, get_retry_after/1,
+	 cseq/1
 	]).
 
 %%--------------------------------------------------------------------
@@ -351,3 +352,16 @@ get_retry_after(Response) when is_record(Response, response) ->
 	    ?DEFAULT_RETRY_AFTER
     end.
 
+
+cseq(Header) when is_record(keylist) ->
+    case sipheader:cseq(Header) of
+	{CSeqStr, Method} ->
+	    case catch list_to_integer(CSeqStr) of
+		CSeqNo when is_integer(CSeqNo) ->
+		    {CSeqNo, Method};
+		_ ->
+		    {unparseable, CSeqStr}
+		end;
+	    {unparseable, String} ->
+		{unparseable, String}
+    end.
