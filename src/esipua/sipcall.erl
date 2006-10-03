@@ -154,8 +154,9 @@ generate_new_request(Method, Dialog, Contact, CSeqNum) when is_integer(CSeqNum)-
     generate_new_request(Method, Dialog, Contact, CSeqNum, []).
 
 generate_new_request(Method, Dialog, Contact, CSeqNum, ExtraHeaders) ->
-    ExtraHeaders1 = [{"Contact",  [Contact]} | ExtraHeaders],
-    {ok, Request, Dialog1, _Dst} = sipdialog:generate_new_request(Method, ExtraHeaders1, <<>>, Dialog, CSeqNum),
+    CSeq = lists:concat([Method, " ", CSeqNum]),
+    ExtraHeaders1 = [{"CSeq", [CSeq]}, {"Contact",  [Contact]} | ExtraHeaders],
+    {ok, Request, Dialog1, _Dst} = sipdialog:generate_new_request(Method, ExtraHeaders1, <<>>, Dialog),
     {ok, Request, Dialog1}.
 
 
