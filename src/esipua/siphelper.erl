@@ -11,6 +11,7 @@
 
 -export([
 	 start_generate_request/5,
+	 send_ack/3,
 	 send_request/1,
 	 send_response/3, send_response/4, send_response/5, send_response/6,
 	 update_authentications/3,
@@ -72,6 +73,37 @@ start_generate_request(Method, From, To, ExtraHeaders, Body) ->
     Request = siprequest:set_request_body(Request1, Body),
 
     {ok, Request, CallId, FromTag, CSeq}.
+
+
+send_ack(Request, Auths) ->
+    Branch = siprequest:generate_branch(),
+    send_ack(Request, Auths, Branch).
+
+send_ack(Request, _Auths, Branch) ->
+    Route = keylist:fetch('route', Request#request.header),
+    TargetURI = Request#request.uri,
+    Dst = case Route of
+	      [] ->
+		  [Dst1 | _] = sipdst:url_to_dstlist(TargetURI, 500, TargetURI),
+		  Dst1;
+	      [FirstRoute | _] ->
+		  [FRC] = contact:parse([FirstRoute]),
+		  FRURL = sipurl:parse(FRC#contact.urlstr),
+		  [Dst1 | _] = sipdst:url_to_dstlist(FRURL, 500, TargetURI),
+		  Dst1
+	  end,
+
+    %% FIXME Should use request uri from INVITE
+    %%{ok, Request1} = siphelper:add_authorization(Request, Auths),
+    Request1 = Request,
+
+    case transportlayer:send_proxy_request(none, Request1, Dst,
+					   ["branch=" ++ Branch]) of
+	{ok, SendingSocket, TLBranch} ->
+	    {ok, SendingSocket, Dst, TLBranch};
+	_ ->
+	    error
+    end.
 
 
 send_request(Request) ->

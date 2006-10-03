@@ -217,16 +217,22 @@ execute(State) ->
     [FromContact] = contact:parse(From),
     FromUri = sipurl:parse(FromContact#contact.urlstr),
     Caller = FromUri#sipurl.user,
-    Caller_name = FromContact#contact.display_name,
-    catch case yate_call:execute_link(State#state.client,
+    Caller_name =
+	case FromContact#contact.display_name of
+	    none ->
+		[];
+	    Caller_name1 ->
+		[{callername, Caller_name1}]
+	end,
+
+    case catch yate_call:execute_link(State#state.client,
 			       [
 				{caller, Caller},
-				{callername, Caller_name},
 				{callto, Call_to},
 				{target, Target}
-			       ]) of
+			       ] ++ Caller_name) of
 	{error, {noroute, _Cmd}} ->
-		  sipcall:drop(SipCall, 404, "Not Found"),
+	    sipcall:drop(SipCall, 404, "Not Found"),
 
 	    %% FIXME reason, drop sip_call
 %% 	    ok = send_response(State, 404, "Not Found"),
@@ -538,6 +544,7 @@ make() ->
 	        "register_sup",
 		"sdp",
 		"sipcall",
+		"sipcall_bye",
 		"sipclient",
 		"sipregister",
 	        "siptest",

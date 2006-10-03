@@ -496,7 +496,7 @@ handle_info({new_response, Response, Origin, _LogStr}, StateName, State) when is
 	{CSeqNo, "INVITE"} when CSeqNo == State#state.invite_cseqno,
 			        State#state.ack_req /= undefined ->
 	    %% Resend ACK
-	    {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(State#state.ack_req, State#state.auths);
+	    {ok, _SendingSocket, _Dst, _TLBranch} = siphelper:send_ack(State#state.ack_req, State#state.auths);
 	_ ->
 	    error_logger:error_msg("~p: Ignore new response ~p ~p~n", [?MODULE, Response#response.status, Response#response.reason])
     end,
@@ -763,7 +763,7 @@ handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, St
 %% ACK dialog and terminate
 %% Should be done in a process on its own.
 handle_new_2xx_response(#response{status=Status}=Response, _Origin, _LogStr, up=StateName, State) ->
-    logger:log(normal, "200 OK received '~p ~s' to my invite",
+    logger:log(normal, "Another 200 OK received '~p ~s' to my invite",
 	       [Status, Response#response.reason]),
 
     Early = State#state.early_dialogs,
@@ -777,51 +777,13 @@ handle_new_2xx_response(#response{status=Status}=Response, _Origin, _LogStr, up=
 
     Early1 = drop_dialog(Dialog, Early),
 
-    {ok, Ack, Dialog1} =
-	generate_new_request("ACK", Dialog, State#state.contact,
-			     State#state.invite_cseqno),
-    {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(Ack, State#state.auths),
-
-    ExtraHeaders = [{"Reason", ["SIP ;cause=200 ;text=\"Call completed elsewhere\""]}],
-    {ok, Bye, Dialog3} =
-	generate_new_request("BYE", Dialog1, State#state.contact, ExtraHeaders),
-    {ok, _Pid, _Branch} = siphelper:send_request(Bye),
-
-    ok = sipdialog:unregister_dialog_controller(Dialog3),
+    ok = sipdialog:unregister_dialog_controller(Dialog),
+    sipcall_bye:start_link(Dialog, State#state.contact, State#state.auths,
+			  State#state.invite_cseqno),
 
     State1 = State#state{early_dialogs=Early1},
     {next_state, StateName, State1}.
 
-
-send_ack(Request, Auths) ->
-    Branch = siprequest:generate_branch(),
-    send_ack(Request, Auths, Branch).
-
-send_ack(Request, _Auths, Branch) ->
-    Route = keylist:fetch('route', Request#request.header),
-    TargetURI = Request#request.uri,
-    Dst = case Route of
-	      [] ->
-		  [Dst1 | _] = sipdst:url_to_dstlist(TargetURI, 500, TargetURI),
-		  Dst1;
-	      [FirstRoute | _] ->
-		  [FRC] = contact:parse([FirstRoute]),
-		  FRURL = sipurl:parse(FRC#contact.urlstr),
-		  [Dst1 | _] = sipdst:url_to_dstlist(FRURL, 500, TargetURI),
-		  Dst1
-	  end,
-
-    %% FIXME Should use request uri from INVITE
-    %%{ok, Request1} = siphelper:add_authorization(Request, Auths),
-    Request1 = Request,
-
-    case transportlayer:send_proxy_request(none, Request1, Dst,
-					   ["branch=" ++ Branch]) of
-	{ok, SendingSocket, TLBranch} ->
-	    {ok, SendingSocket, Dst, TLBranch};
-	_ ->
-	    error
-    end.
 
 do_send_invite(Request, State) ->
     [Contact] = keylist:fetch('contact', Request#request.header),
