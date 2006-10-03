@@ -20,7 +20,7 @@
 -export([
 	 start_link/3,
 	 stop/1,
-	 call/3,
+%% 	 call/3,
 	 build_invite/3,
 	 send_invite/2,
 	 receive_invite/3,
@@ -67,6 +67,7 @@
 		invite_branch,			% Outgoing INVITE branch
 		invite_cseqno=0,		% Outgoing cseq
 		invite_rseqno,			% Incoming rseqno
+		ack_req,			% ACK req
 		bye_branch,			% BYE branch id
 		bye_pid,			% BYE pid
 		auths=[],
@@ -111,7 +112,7 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 		    CallId = sipheader:callid(Response#response.header),
 		    case callregister:find_call(CallId) of
 			{ok, Pid} ->
-			    Pid ! {new_response, Response, Origin, LogStr};
+			    Pid ! {new_2xx_response, Response, Origin, LogStr};
 			_ ->
 			    logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction, no matching dialog, no matching call - dropping", [LogStr, Status, Reason])
 		    end
@@ -125,10 +126,10 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 %%
 %% outgoing yate call
 %%
-call(From, To, Body) when is_record(From, contact),
-			  is_record(To, contact),
-			  is_binary(Body) ->
-    start_link(From, To, Body).
+%% call(From, To, Body) when is_record(From, contact),
+%% 			  is_record(To, contact),
+%% 			  is_binary(Body) ->
+%%     start_link(From, To, Body).
 
 %%--------------------------------------------------------------------
 %% Function: generate_new_request(Method, State, Contact)
@@ -154,7 +155,8 @@ generate_new_request(Method, Dialog, Contact, CSeqNum) when is_integer(CSeqNum)-
     generate_new_request(Method, Dialog, Contact, CSeqNum, []).
 
 generate_new_request(Method, Dialog, Contact, CSeqNum, ExtraHeaders) ->
-    CSeq = lists:concat([Method, " ", CSeqNum]),
+    CSeq = lists:concat([CSeqNum, " ", Method]),
+%%     CSeq = lists:concat([Method, " ", CSeqNum]),
     ExtraHeaders1 = [{"CSeq", [CSeq]}, {"Contact",  [Contact]} | ExtraHeaders],
     {ok, Request, Dialog1, _Dst} = sipdialog:generate_new_request(Method, ExtraHeaders1, <<>>, Dialog),
     {ok, Request, Dialog1}.
@@ -192,13 +194,13 @@ receive_invite(Call, Request, OldPid) when is_pid(Call),
 %%     gen_fsm:start_link(?MODULE, [Request, LogStr, self()], []).
 
 start_link(Module, Args, Options) when is_atom(Module) ->
-    gen_fsm:start_link(?MODULE, [Module, Args, Options, self()], Options);
+    gen_fsm:start_link(?MODULE, [Module, Args, Options, self()], Options).
 
-start_link(From, To, Body) when is_record(From, contact),
-				is_record(To, contact),
-				is_binary(Body) ->
-    logger:log(normal, "sipclient: start_link ~p~n", [self()]),
-    gen_fsm:start_link(?MODULE, [From, To, Body], []).
+%% start_link(From, To, Body) when is_record(From, contact),
+%% 				is_record(To, contact),
+%% 				is_binary(Body) ->
+%%     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
+%%     gen_fsm:start_link(?MODULE, [From, To, Body], []).
 
 drop(Call) ->
     gen_fsm:send_event(Call, drop).
@@ -243,62 +245,62 @@ init([Module, Args, Options, Owner]) when is_atom(Module) ->
 	    {stop, Reason};
 	ignore ->
 	    ignore
-    end;
+    end.
 
 
-init([Request, LogStr, OldPid]) when is_record(Request, request) ->
-    case transactionlayer:adopt_st_and_get_branchbase(Request) of
-	ignore ->
-	    {stop, {error, ignore}};
-	error ->
-	    {stop, error};
-	BranchBase ->
-	    init2(Request, LogStr, BranchBase, OldPid)
-    end;
+%% init([Request, LogStr, OldPid]) when is_record(Request, request) ->
+%%     case transactionlayer:adopt_st_and_get_branchbase(Request) of
+%% 	ignore ->
+%% 	    {stop, {error, ignore}};
+%% 	error ->
+%% 	    {stop, error};
+%% 	BranchBase ->
+%% 	    init2(Request, LogStr, BranchBase, OldPid)
+%%     end;
 
 
 %% Outgoing call
-init([Request]) when is_record(Request, request) ->
-    ok.
+%% init([Request]) when is_record(Request, request) ->
+%%     ok.
 
 
 
 
-init2(Request, LogStr, _BranchBase, OldPid) ->
-    logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
-    THandler = transactionlayer:get_handler_for_request(Request),
-    ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
-    Invite_pid = transactionlayer:get_pid_from_handler(THandler),
-    State = #state{invite_req=Request, invite_pid=Invite_pid},
-%%     {ok, _TRef} = timer:send_after(20000, timeout),
-    execute(State).
+%% init2(Request, LogStr, _BranchBase, OldPid) ->
+%%     logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
+%%     THandler = transactionlayer:get_handler_for_request(Request),
+%%     ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
+%%     Invite_pid = transactionlayer:get_pid_from_handler(THandler),
+%%     State = #state{invite_req=Request, invite_pid=Invite_pid},
+%% %%     {ok, _TRef} = timer:send_after(20000, timeout),
+%%     execute(State).
 
-execute(State) ->
-    catch case a:'TODO'() of
-	{error, {noroute}} ->
-	    %% FIXME reason
-	    ok = send_response(State, 404, "Not Found"),
-	    {stop, normal};
-	ok ->
-	    execute_finish(State)
-    end.
+%% execute(State) ->
+%%     catch case a:'TODO'() of
+%% 	{error, {noroute}} ->
+%% 	    %% FIXME reason
+%% 	    ok = send_response(State, 404, "Not Found"),
+%% 	    {stop, normal};
+%% 	ok ->
+%% 	    execute_finish(State)
+%%     end.
 
-execute_finish(State) ->
-    ok = send_response(State, 101, "Dialog Establishment"),
-    {ok, State2} = setup(State),
-    {ok, incoming, State2}.
+%% execute_finish(State) ->
+%%     ok = send_response(State, 101, "Dialog Establishment"),
+%%     {ok, State2} = setup(State),
+%%     {ok, incoming, State2}.
 
 
-setup(State) ->   
-    Request = State#state.invite_req,
+%% setup(State) ->   
+%%     Request = State#state.invite_req,
 
-    %% FIXME Contact
-    Contact = "<sip:dummy@192.168.0.7:5080>",
-    throw(setup),
-    {ok, Dialog} = create_dialog(Request, Contact),
+%%     %% FIXME Contact
+%%     Contact = "<sip:dummy@192.168.0.7:5080>",
+%%     throw(setup),
+%%     {ok, Dialog} = create_dialog(Request, Contact),
 
-%%     {ok, State1b} = startup(State, Id),
-    {ok, State#state{contact=Contact,dialog=Dialog}}.
+%% %%     {ok, State1b} = startup(State, Id),
+%%     {ok, State#state{contact=Contact,dialog=Dialog}}.
 
 
 create_dialog(Request, Contact) ->
@@ -489,8 +491,19 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 	    {next_state, StateName, State1}
     end;
 
-handle_info({new_response, Response, Origin, LogStr}, StateName, State) when is_record(Origin, siporigin) ->
-    handle_new_response(Response, Origin, LogStr, StateName, State);
+handle_info({new_response, Response, Origin, _LogStr}, StateName, State) when is_record(Origin, siporigin) ->
+    case siphelper:cseq(Response#response.header) of
+	{CSeqNo, "INVITE"} when CSeqNo == State#state.invite_cseqno,
+			        State#state.ack_req /= undefined ->
+	    %% Resend ACK
+	    {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(State#state.ack_req, State#state.auths);
+	_ ->
+	    error_logger:error_msg("~p: Ignore new response ~p ~p~n", [?MODULE, Response#response.status, Response#response.reason])
+    end,
+    {next_state, StateName, State};
+
+handle_info({new_2xx_response, Response, Origin, LogStr}, StateName, State) when is_record(Origin, siporigin) ->
+    handle_new_2xx_response(Response, Origin, LogStr, StateName, State);
 
 handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, StateName, State) ->
     %% Don't answer ACK
@@ -636,8 +649,10 @@ set_dialog_state_uac(Response, State) when is_record(Response, response),
 
 create_dialog_state_uac(Request, Response) when is_record(Request, request),
 						is_record(Response, response) ->
+    error_logger:info_msg("~p: create_dialog_state_uac1 ~n", [?MODULE]),
     {ok, Dialog} = sipdialog:create_dialog_state_uac(Request, Response),
     ok = sipdialog:register_dialog_controller(Dialog, self()),
+    error_logger:info_msg("~p: create_dialog_state_uac2 ~n", [?MODULE]),
     Dialog.
 
 update_dialog_state_uac(Response, Dialog) when is_record(Response, response),
@@ -714,6 +729,13 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response
 
 
 handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, State) ->
+%%     case sipheader:dialogid(Response#response.header) of
+%% 	xxxx
+%%     Dialog =
+%% 	case find_dialog(Response, State) of
+%% 	    {early, Dialog2} ->
+%% 		update_dialog_state_uac(Response, Dialog2);
+
     Owner = State#state.owner,
     Early = State#state.early_dialogs,
     Dialog =
@@ -730,18 +752,19 @@ handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, St
     {ok, Ack, Dialog1} =
 	generate_new_request("ACK", Dialog, State#state.contact,
 			     State#state.invite_cseqno),
-    {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(Ack, State#state.auths),
+%%     {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(Ack, State#state.auths),
 
     Owner ! {call_answered, self(), Response},
 
-    State1 = State#state{dialog=Dialog1, early_dialogs=Early1},
+    State1 = State#state{dialog=Dialog1, early_dialogs=Early1,
+			 ack_req=Ack},
     {next_state, up, State1}.
 
-handle_new_response(#response{status=Status}=Response, _Origin, _LogStr, up=StateName, State) ->
-    %% FIXME retransmit ACK
+%% ACK dialog and terminate
+%% Should be done in a process on its own.
+handle_new_2xx_response(#response{status=Status}=Response, _Origin, _LogStr, up=StateName, State) ->
     logger:log(normal, "200 OK received '~p ~s' to my invite",
 	       [Status, Response#response.reason]),
-    %% Acknowledge and terminate dialog
 
     Early = State#state.early_dialogs,
     Dialog =
@@ -869,11 +892,8 @@ find_dialog(_DialogId, []) ->
 find_dialog(Response, Dialogs) when is_record(Response, response),
 				     is_list(Dialogs) ->
     Header = Response#response.header,
-    CallId = sipheader:callid(Header),
-
-    LocalTag = sipheader:get_tag(keylist:fetch('from', Header)),
-    RemoteTag = sipheader:get_tag(keylist:fetch('to', Header)),
-    find_dialog({CallId, LocalTag, RemoteTag}, Dialogs);
+    DialogId = sipheader:dialogid(Header),
+    find_dialog(DialogId, Dialogs);
 
 find_dialog({CallId, LocalTag, RemoteTag}=DialogId, [Dialog|R]) when is_list(CallId),
 			     is_list(LocalTag),
