@@ -72,24 +72,22 @@ stop(Call) ->
 %% gen_server callbacks
 %%
 init([Client, Cmd, Parent]) when is_record(Cmd, command) ->
-    error_logger:info_msg("~p: ~p ~p~n", [?MODULE, self(), incoming]),
-    process_flag(trap_exit, true),
-    link(Parent),
-    {ok, Handle} = yate:open(Client),
-    Status = incoming,
-    State0 = #state{client=Client,parent=Parent,handle=Handle},
-    setup(Status, Cmd, State0);
+    init_common(incoming, Client, [Cmd], Parent);
 
 init([Client, Keys, Parent]) when is_list(Keys) ->
-    error_logger:info_msg("~p: ~p ~p~n", [?MODULE, self(), outgoing]),
+    init_common(outgoing, Client, [Keys], Parent).
+
+
+init_common(Status, Client, Args, Parent) ->
+    error_logger:info_msg("~p: ~p ~p~n", [?MODULE, self(), Status]),
     process_flag(trap_exit, true),
     link(Parent),
     {ok, Handle} = yate:open(Client),
-    Status = outgoing,
     State0 = #state{client=Client,parent=Parent,handle=Handle},
-    setup(Status, Keys, State0).
+    setup(Status, Args, State0).
 
-setup(incoming, Cmd, State) ->
+
+setup(incoming, [Cmd], State) ->
     Id = command:fetch_key(id, Cmd),
     Handle = State#state.handle,
     ok = yate:watch(Handle, call.execute,
@@ -98,7 +96,7 @@ setup(incoming, Cmd, State) ->
 		    end),
     {ok, State#state{peerid=Id,status=incoming}};
 
-setup(outgoing, Keys, State) ->
+setup(outgoing, [Keys], State) ->
     Handle = State#state.handle,
     Parent = State#state.parent,
     {ok, RetValue, RetCmd} = yate:send_msg(Handle, call.execute, Keys),
