@@ -73,7 +73,7 @@ init([Host, Port]) ->
     {ok, Conn} = yate_conn_srv:start_link(Host, Port, self()),
     error_logger:info_msg("Connected ~p~n", [?MODULE]),
 %%    link(Conn),
-%%     process_flag(trap_exit, true),
+    process_flag(trap_exit, true),
     {ok, #sstate{conn=Conn}}.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -111,7 +111,7 @@ handle_call({client, {msg, Name, Keys}, _Pid}, From, State) ->
     ok = yate_conn:queue_msg(State#sstate.conn, Name, Keys, {send, From}),
     {noreply, State};
 
-handle_call({client, close, Pid}, From, State) ->
+handle_call({client, close, Pid}, _From, State) ->
     {ok, State1} = uninstall_pid(Pid, State),
     unlink(Pid),
     {reply, ok, State1};
@@ -226,14 +226,14 @@ uninstall_pid(Pid, State) ->
 	    {ok, State}
     end.
 
-uninstall_pid(Pid, [], State) ->
+uninstall_pid(_Pid, [], State) ->
     {ok, State};
 uninstall_pid(Pid, [PidEntry=#pidentry{type=watch}|R], State) ->
-    {ok, Watched1, Pids1} = uninstall(watch, PidEntry#pidentry.name,
+    {ok, Watched1, _Pids1} = uninstall(watch, PidEntry#pidentry.name,
 					Pid, State, State#sstate.watched),
     uninstall_pid(Pid, R, State#sstate{watched=Watched1});
 uninstall_pid(Pid, [PidEntry=#pidentry{type=install}|R], State) ->
-    {ok, Installed1, Pids1} = uninstall(install, PidEntry#pidentry.name,
+    {ok, Installed1, _Pids1} = uninstall(install, PidEntry#pidentry.name,
 					Pid, State, State#sstate.installed),
     uninstall_pid(Pid, R, State#sstate{installed=Installed1}).
 
