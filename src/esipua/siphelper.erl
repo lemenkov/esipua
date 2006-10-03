@@ -353,15 +353,16 @@ get_retry_after(Response) when is_record(Response, response) ->
     end.
 
 
-cseq(Header) when is_record(keylist) ->
+cseq(Header) when is_record(Header, keylist) ->
     case sipheader:cseq(Header) of
+	{unparseable, String} ->
+	    {unparseable, String};
+
 	{CSeqStr, Method} ->
 	    case catch list_to_integer(CSeqStr) of
 		CSeqNo when is_integer(CSeqNo) ->
 		    {CSeqNo, Method};
 		_ ->
 		    {unparseable, CSeqStr}
-		end;
-	    {unparseable, String} ->
-		{unparseable, String}
+	    end
     end.
