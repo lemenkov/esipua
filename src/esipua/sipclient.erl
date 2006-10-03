@@ -43,9 +43,8 @@
 -define(SERVER, ?MODULE).
 
 
+%% yxa_app callbacks
 -export([init/0, request/3, response/3]).
--export([test/0]).
-%%-export([call/1]).
 
 -include("siprecords.hrl").
 -include("sipsocket.hrl").
@@ -98,34 +97,6 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 call(Client, Cmd, From, Args) when is_record(Cmd, command) ->
     Id = command:fetch_key(id, Cmd),
     start_link(Client, Id, Cmd, From, Args).
-
-test() ->
-    From = #contact{display_name = none,
-		    urlstr = "sip:referer@skinner:5080",
-		    contact_param = contact_param:to_norm([])
-		   },
-    To = #contact{display_name = none,
-		    urlstr = "sip:1002@mulder",
-		    contact_param = contact_param:to_norm([])
-		   },
-    Method = "OPTIONS",
-    SDP = [],
-    Contact = "sip:contact@localhost",
-    {ok, Request, _CallId, _FromTag} =
-	siphelper:start_generate_request(Method,
-                               From,
-                               To,
-                               [{"Contact", [Contact]},
-                                {"Content-Type", ["application/sdp"]}
-                               ],
-                               list_to_binary(SDP)
-                              ),
-
-    {ok, _Pid, _Branch} = send_request(Request),
-
-    %%ok = sipdialog:register_dialog_controller(CallId, FromTag, self()),
-    ok.
-
 
 start_link(Client, Request, LogStr) ->
     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
@@ -320,13 +291,6 @@ create_sdp_body(Localip, Localport) ->
     Body = list_to_binary(lists:flatten(sdp:print(Sdp))),
     {ok, Body}.
 
-create_dialog(Request, Contact) ->
-    THandler = transactionlayer:get_handler_for_request(Request),
-    {ok, ToTag} = transactionlayer:get_my_to_tag(THandler),
-    {ok, Dialog} = sipdialog:create_dialog_state_uas(Request, ToTag, Contact),
-    ok = sipdialog:register_dialog_controller(Dialog, self()),
-    {ok, Dialog}.
-
 %% TODO move 200ok to separate process and retransmitt
 %% send_200ok(State) ->
 %%     {ok, State1, Body} = get_sdp_body(State),
@@ -480,25 +444,6 @@ handle_info(Info, StateName, State) ->
 terminate(Reason, _StateName, _State) ->
     error_logger:error_msg("~p: Terminated ~p~n", [?MODULE, Reason]),
     terminated.
-
-%% send_request() ->
-
-send_request(Request) ->
-    Branch = siprequest:generate_branch(),
-    Route = keylist:fetch('route', Request#request.header),
-    TargetURI = Request#request.uri,
-    Dst = case Route of
-	      [] ->
-		  [Dst1 | _] = sipdst:url_to_dstlist(TargetURI, 500, TargetURI),
-		  Dst1;
-	      [FirstRoute | _] ->
-		  [FRC] = contact:parse([FirstRoute]),
-		  FRURL = sipurl:parse(FRC#contact.urlstr),
-		  [Dst1 | _] = sipdst:url_to_dstlist(FRURL, 500, TargetURI),
-		  Dst1
-	  end,
-    Pid = transactionlayer:start_client_transaction(Request, Dst, Branch, ?DEFAULT_TIMEOUT, self()),
-    {ok, Pid, Branch}.
 
 
 sipstatus_to_reason(401) ->
