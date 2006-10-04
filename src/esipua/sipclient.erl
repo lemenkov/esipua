@@ -361,6 +361,14 @@ handle_info({yate_call, answered, _Cmd, Call}, incoming=_StateName, State=#state
     ok = sipcall:answer(SipCall, Body),
     {next_state, up, State1};
 
+handle_info({yate_call, dtmf, Cmd, Call}, StateName, State=#state{call=Call}) ->
+    error_logger:info_msg("~p: dtmf ~n", [?MODULE]),
+
+    SipCall = State#state.sip_call,
+    Dtmf = command:fetch_key(text, Cmd),
+    ok = yate_call:send_dtmf(SipCall, Dtmf),
+    {next_state, StateName, State};
+
 handle_info({yate_call, disconnected, Cmd, Call}, StateName, State=#state{call=Call}) ->
     error_logger:info_msg("~p: Call disconnected ~p ~p~n", [?MODULE, Call, StateName]),
     SipCall = State#state.sip_call,
