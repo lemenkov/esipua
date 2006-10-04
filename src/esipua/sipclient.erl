@@ -374,7 +374,7 @@ handle_info({yate_call, disconnected, Cmd, Call}, StateName, State=#state{call=C
     SipCall = State#state.sip_call,
     case command:find_key(reason, Cmd) of
 	{ok, YateReason} ->
-	    Status = reason_to_sipstatus(YateReason),
+	    Status = reason_to_sipstatus(list_to_atom(YateReason)),
 	    ok = sipcall:drop(SipCall, Status, "FIXME");
 	_ ->
 	    ok = sipcall:drop(SipCall)
