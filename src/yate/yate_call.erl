@@ -24,6 +24,7 @@
 	  id,
 	  peerid,
 	  rtpid,
+	  localip,
 	  status				% incoming or outgoing
 	 }).
 
@@ -226,7 +227,7 @@ handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
 			{ok, Localip1} ->
 			    Localip1;
 			error ->
-			    undefined
+			    State#state.localip
 		    end,
 
 		Localport =
@@ -243,7 +244,7 @@ handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
 			error ->
 			    undefined
 		    end,
-		State2 = State#state{rtpid=Rtpid},
+		State2 = State#state{rtpid=Rtpid, localip=Localip},
 		{{ok, Localip, Localport}, State2};
 
 	    false ->
@@ -268,10 +269,16 @@ handle_call({start_rtp, Remote_address}, _From, State) ->
 		       {remoteip, Remote_address}
 		      ]),
 
-    Localip = command:fetch_key(localip, RetCmd),
+    Localip =
+	case command:find_key(localip, RetCmd) of
+	    {ok, Localip1} ->
+		Localip1;
+	    error ->
+		State#state.localip
+	end,
     Localport = list_to_integer(command:fetch_key(localport, RetCmd)),
 
-    {reply, {ok, Localip, Localport}, State};
+    {reply, {ok, Localip, Localport}, State#state{localip=Localip}};
 
 handle_call(ringing, _From, State) ->
     Id = State#state.id,
