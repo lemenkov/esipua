@@ -240,24 +240,40 @@ uninstall_pid(Pid, [PidEntry=#pidentry{type=install}|R], State) ->
 
 
 uninstall(Type, Name, Pid, State, Installed) ->
-    InstallList = dict:fetch(Name, Installed),
-    NewInstallList = [InstallEntry || InstallEntry <- InstallList, InstallEntry#install_entry.pid =/= Pid],
-    PidList = dict:fetch(Pid, State#sstate.pids),
-    NewPidList = [PidEntry || PidEntry <- PidList, PidEntry#pidentry.name =/= Name],
-    case NewInstallList of
-	[] ->
-	    NewInstalled = dict:erase(Name, Installed),
-	    ok = do_uninstall(Type, State#sstate.conn, Name);
-	_ ->
-	    NewInstalled = dict:store(Name, NewInstallList, Installed)
-    end,
-    case NewPidList of
-	[] ->
-	    NewPids = dict:erase(Pid, State#sstate.pids);
-	_ ->
-	    NewPids = dict:store(Pid, NewPidList, State#sstate.pids)
-    end,
+    {ok, NewInstalled} = uninstall2(Type, Name, Pid, State, Installed),
+    {ok, NewPids} = uninstall3(Name, Pid, State),
     {ok, NewInstalled, NewPids}.
+
+uninstall2(Type, Name, Pid, State, Installed) ->
+    case dict:find(Name, Installed) of
+	{ok, InstallList} ->
+	    NewInstallList = [InstallEntry || InstallEntry <- InstallList, InstallEntry#install_entry.pid =/= Pid],
+	    case NewInstallList of
+		[] ->
+		    NewInstalled = dict:erase(Name, Installed),
+		    ok = do_uninstall(Type, State#sstate.conn, Name);
+		_ ->
+		    NewInstalled = dict:store(Name, NewInstallList, Installed)
+	    end,
+	    {ok, NewInstalled};
+	error ->
+	    {ok, Installed}
+    end.
+
+uninstall3(Name, Pid, State) ->
+    case dict:find(Pid, State#sstate.pids) of
+	{ok, PidList} ->
+	    NewPidList = [PidEntry || PidEntry <- PidList, PidEntry#pidentry.name =/= Name],
+	    case NewPidList of
+		[] ->
+		    NewPids = dict:erase(Pid, State#sstate.pids);
+		_ ->
+		    NewPids = dict:store(Pid, NewPidList, State#sstate.pids)
+	    end,
+	    {ok, NewPids};
+	error ->
+	    {ok, State#sstate.pids}
+    end.
 
 
 do_install(install, Handle, Name) ->
