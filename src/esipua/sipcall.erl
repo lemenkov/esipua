@@ -25,6 +25,7 @@
 	 send_invite/2,
 	 receive_invite/3,
 	 proceeding/3,
+	 proceeding/4,
 	 answer/2,
 	 answer/3,
 	 drop/1,
@@ -217,7 +218,15 @@ proceeding(Call, Status, Reason) when is_pid(Call),
 				      Status >= 101,
 				      Status =< 199,
 				      is_list(Reason) ->
-    gen_fsm:send_event(Call, {proceeding, Status, Reason}).
+    proceeding(Call, Status, Reason, <<>>).
+
+proceeding(Call, Status, Reason, Body) when is_pid(Call),
+				      is_integer(Status),
+				      Status >= 101,
+				      Status =< 199,
+				      is_list(Reason),
+				      is_binary(Body) ->
+    gen_fsm:send_event(Call, {proceeding, Status, Reason, Body}).
 
 
 answer(Call, Body) when is_pid(Call),
@@ -390,11 +399,12 @@ incoming({drop, Status, Reason}, State) when is_integer(Status),
 						   is_list(Reason) ->
     ok = send_response(State, Status, Reason),
     {next_state, incoming, State};
-incoming({proceeding, Status, Reason}, State) when is_integer(Status),
+incoming({proceeding, Status, Reason, Body}, State) when is_integer(Status),
 						   Status >= 101,
 						   Status =< 199,
-						   is_list(Reason) ->
-    ok = send_response(State, Status, Reason),
+						   is_list(Reason),
+						   is_binary(Body) ->
+    ok = send_response(State, Status, Reason, [], Body),
     {next_state, incoming, State};
 incoming({answer, ExtraHeaders, Body}, State) when is_list(ExtraHeaders),
 						   is_binary(Body) ->
