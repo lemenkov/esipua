@@ -7,7 +7,7 @@
 %% api
 -export([start_link/2, execute_link/2, answer/1, drop/2, drop/1,
 	 play_wave/3, play_tone/2, start_rtp/2, start_rtp/3,
-	 ringing/1, stop/1]).
+	 ringing/1, send_dtmf/2, stop/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -23,6 +23,7 @@
 	  parent,
 	  id,
 	  peerid,
+	  rtpid,
 	  status				% incoming or outgoing
 	 }).
 
@@ -61,6 +62,9 @@ start_rtp(Call, Remote_address, Remote_port) ->
 start_rtp(Call, Remote_address) ->
     error_logger:info_msg("~p: start_rtp~n", [?MODULE]),
     gen_server:call(Call, {start_rtp, Remote_address}).
+
+send_dtmf(Call, Dtmf) ->
+    gen_server:call(Call, {send_dtmf, Dtmf}).
 
 ringing(Call) ->
     gen_server:call(Call, ringing).
@@ -147,14 +151,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 handle_call(answer, _From, State) ->
     Id = State#state.id,
-    Peerid = State#state.peerid,
     Handle = State#state.handle,
     {ok, _RetValue, _RetCmd} =
 	yate:send_msg(Handle, chan.masquerade,
 		      [
 		       {message, call.answered},
 		       {id, Id},
-  		       {targetid, Peerid},
 		       {module, "erlang"}
 		      ]),
     {reply, ok, State};
@@ -215,8 +217,8 @@ handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
 		       {remoteport, Remote_port},
 		       {format, Format}
 		      ]),
-
-    Reply =
+    
+    {Reply, State1} =
 	case RetValue of
 	    true ->
 		Localip =
@@ -234,12 +236,20 @@ handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
 			error ->
 			    undefined
 		    end,
-		{ok, Localip, Localport};
+		Rtpid =
+		    case command:find_key(rtpid, RetCmd) of
+			{ok, Rtpid1} ->
+			    Rtpid1;
+			error ->
+			    undefined
+		    end,
+		State2 = State#state{rtpid=Rtpid},
+		{{ok, Localip, Localport}, State2};
 
 	    false ->
-		{error, yate_error}
+		{{error, yate_error}, State}
 	end,
-    {reply, Reply, State};
+    {reply, Reply, State1};
 
 handle_call({start_rtp, Remote_address}, _From, State) ->
     Id = State#state.id,
@@ -265,17 +275,29 @@ handle_call({start_rtp, Remote_address}, _From, State) ->
 
 handle_call(ringing, _From, State) ->
     Id = State#state.id,
-    Peerid = State#state.peerid,
     Handle = State#state.handle,
     {ok, _RetValue, _RetCmd} =
 	yate:send_msg(Handle, chan.masquerade,
 		      [
 		       {message, "call.ringing"},
  		       {id, Id},
-   		       {targetid, Peerid},
 		       {module, "erlang"}
 		      ]),
     
+    {reply, ok, State};
+
+handle_call({send_dtmf, Dtmf}, _From, State) ->
+    Id = State#state.id,
+    Rtpid = State#state.rtpid,
+    Handle = State#state.handle,
+    ok =
+	yate:queue_msg(Handle, chan.masquerade,
+		      [
+		       {message, "chan.dtmf"},
+ 		       {id, Id},
+		       {targetid, Rtpid},
+		       {text, Dtmf}
+		      ]),
     {reply, ok, State};
 
 handle_call(Request, _From, State) ->
@@ -346,6 +368,11 @@ handle_message(chan.disconnected, ans, Cmd, _From, State) ->
     Parent = State#state.parent,
     Parent ! {yate_call, disconnected, Cmd, self()},
     {noreply, State};
+handle_message(chan.dtmf, req, Cmd, From, State) ->
+    Parent = State#state.parent,
+    Parent ! {yate_call, dtmf, Cmd, self()},
+    ok = yate:ret(From, Cmd, true),
+    {noreply, State};
 handle_message(chan.hangup, ans, _Cmd, _From, State) ->
     Parent = State#state.parent,
     Parent ! {yate_call, hangup, self()},
@@ -396,6 +423,10 @@ setup_watches(State) ->
 			    %% Check
 			    Id == command:fetch_key(targetid, Cmd)
 		    end),
+    ok = yate:install(Handle, chan.dtmf,
+		      fun(Cmd) ->
+			      Id == command:fetch_key(targetid, Cmd)
+		      end),
     ok.
 
 %% startup(State, Id) ->
