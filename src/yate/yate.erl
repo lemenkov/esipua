@@ -96,8 +96,9 @@ uninstall(Handle, Name) ->
 %% @doc answer message
 %% @end
 %%--------------------------------------------------------------------
-ret(Pid, Cmd, Success) ->
-    Pid ! {ret, Cmd#command{success=Success}}.
+ret(Pid, Cmd, Success) when is_pid(Pid), is_record(Cmd, command) ->
+    Pid ! {ret, Cmd#command{success=Success}},
+    ok.
 
 %%--------------------------------------------------------------------
 %% @spec ret(Handle, Cmd, Processed, Retval) -> ok
@@ -107,9 +108,10 @@ ret(Pid, Cmd, Success) ->
 %% @doc answer message
 %% @end
 %%--------------------------------------------------------------------
-ret(Pid, Cmd, Success, Retval) ->
+ret(Pid, Cmd, Success, Retval) when is_pid(Pid), is_record(Cmd, command) ->
     Header = (Cmd#command.header)#message{retvalue=Retval},
-    Pid ! {ret, Cmd#command{success=Success,header=Header}}.
+    Pid ! {ret, Cmd#command{success=Success,header=Header}},
+    ok.
 
 %%--------------------------------------------------------------------
 %% @spec queue_msg(Handle, Name, Keys) -> ok
