@@ -11,6 +11,7 @@
 
 -export([
 	 start_generate_request/5,
+	 send_ack/2,
 	 send_ack/3,
 	 send_request/1,
 	 send_response/3, send_response/4, send_response/5, send_response/6,
