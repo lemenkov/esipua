@@ -4,8 +4,8 @@
 
 %%
 %% States:
-%% incoming - Incoming calls 
-%% outgoing - Outgoing calls
+%% incoming - SIP to Yate
+%% outgoing - Yate to SIP
 %% up       - Call up
 %% bye_sent - SIP BYE sent
 %%
@@ -340,17 +340,13 @@ handle_info({yate_call, dialog, Call}, incoming=StateName, State=#state{call=Cal
 %%     ok = send_response(State, 101, "Dialog Establishment"),
     {next_state, StateName, State};
 
-handle_info({yate_call, ringing, _Cmd, Call}, incoming=StateName, State=#state{call=Call}) ->
-    %% FIXME send sdp if earlymedia=true
-    SipCall = State#state.sip_call,
-    ok = sipcall:proceeding(SipCall, 180, "Ringing"),
-    {next_state, StateName, State};
+handle_info({yate_call, ringing, Cmd, Call}, incoming=StateName, State=#state{call=Call}) ->
+    {ok, State1} = handle_proceeding(180, "Ringing", Cmd, State),
+    {next_state, StateName, State1};
 
-handle_info({yate_call, progress, _Cmd, Call}, incoming=StateName, State=#state{call=Call}) ->
-    %% FIXME send 183 to sip_call
-%%     {ok, State1, Body} = get_sdp_body(State),
-%%     ok = send_response(State1, 183, "Session Progress", [], Body),
-    {next_state, StateName, State};
+handle_info({yate_call, progress, Cmd, Call}, incoming=StateName, State=#state{call=Call}) ->
+    {ok, State1} = handle_proceeding(183, "Session Progress", Cmd, State),
+    {next_state, StateName, State1};
 
 handle_info({yate_call, answered, _Cmd, Call}, incoming=_StateName, State=#state{call=Call}) ->
     error_logger:info_msg("~p: answer ~n", [?MODULE]),
@@ -458,6 +454,23 @@ handle_info(Info, StateName, State) ->
 terminate(Reason, _StateName, _State) ->
     error_logger:error_msg("~p: Terminated ~p~n", [?MODULE, Reason]),
     terminated.
+
+
+handle_proceeding(Status, Reason, Cmd, State) ->
+    SipCall = State#state.sip_call,
+
+    {State1, Body1} =
+	case command:find_key(media, Cmd) of
+	    {ok, "yes"} ->
+		{ok, State2, Body2} = get_sdp_body(State),
+		{State2, Body2};
+
+	    _ ->
+		{State, <<>>}
+	end,
+
+    ok = sipcall:proceeding(SipCall, Status, Reason, Body1),
+    {ok, State1}.
 
 
 sipstatus_to_reason(401) ->
