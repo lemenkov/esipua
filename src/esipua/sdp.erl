@@ -15,7 +15,17 @@
 
 -export([test/0, test_sdp/0]).
 
+parse([]) ->
+    {error, empty};
 parse(String) when is_list(String) ->
+   case catch do_parse(String) of
+       {ok, Sdp}=Res ->
+	   Res;
+       {'EXIT', Reason} ->
+	   {error, Reason}
+   end.
+
+do_parse(String) when is_list(String) ->
     Packetfixed = siputil:linefix(String),
     Lines = string:tokens(Packetfixed, "\n"),
     Parseheader = fun(Line) ->
