@@ -382,8 +382,8 @@ handle_info({yate_call, disconnected, Cmd, Call}, StateName, State=#state{call=C
     SipCall = State#state.sip_call,
     case command:find_key(reason, Cmd) of
 	{ok, YateReason} ->
-	    Status = reason_to_sipstatus(list_to_atom(YateReason)),
-	    ok = sipcall:drop(SipCall, Status, "FIXME");
+	    {Status, Reason} = reason_to_sipstatus(list_to_atom(YateReason)),
+	    ok = sipcall:drop(SipCall, Status, Reason);
 	_ ->
 	    ok = sipcall:drop(SipCall)
 	end,
@@ -545,37 +545,41 @@ sipstatus_to_reason(604) ->
 sipstatus_to_reason(Status) when Status >= 600, Status =< 699 ->
     busy.
 
-reason_to_sipstatus(incomplete) ->
+reason_to_sipstatus(Reason) when is_atom(Reason)  ->
+    Status = reason_to_sipstatus2(Reason),
+    {Status, atom_to_list(Reason)}.
+
+reason_to_sipstatus2(incomplete) ->
     484;
-reason_to_sipstatus(noroute) ->
+reason_to_sipstatus2(noroute) ->
     404;
-reason_to_sipstatus(noconn) ->
+reason_to_sipstatus2(noconn) ->
     503;
-reason_to_sipstatus(noauth) ->
+reason_to_sipstatus2(noauth) ->
     401;
-reason_to_sipstatus(nomedia) ->
+reason_to_sipstatus2(nomedia) ->
     415;
-reason_to_sipstatus(nocall) ->
+reason_to_sipstatus2(nocall) ->
     481;
-reason_to_sipstatus(busy) ->
+reason_to_sipstatus2(busy) ->
     486;
-reason_to_sipstatus(noanswer) ->
+reason_to_sipstatus2(noanswer) ->
     487;
-reason_to_sipstatus(rejected) ->
+reason_to_sipstatus2(rejected) ->
     406;
-reason_to_sipstatus(forbidden) ->
+reason_to_sipstatus2(forbidden) ->
     403;
-reason_to_sipstatus(offline) ->
+reason_to_sipstatus2(offline) ->
     404;
-reason_to_sipstatus(congestion) ->
+reason_to_sipstatus2(congestion) ->
     480;
-reason_to_sipstatus(failure) ->
+reason_to_sipstatus2(failure) ->
     500;
-reason_to_sipstatus(pending) ->
+reason_to_sipstatus2(pending) ->
     491;
-reason_to_sipstatus(looping) ->
+reason_to_sipstatus2(looping) ->
     483;
-reason_to_sipstatus(Reason) ->
+reason_to_sipstatus2(Reason) ->
     error_logger:error_msg("~p: Unknown reason code '~p', returning 500~n",
 			   [?MODULE, Reason]),
     500.
