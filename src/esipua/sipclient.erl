@@ -193,19 +193,31 @@ adopt_transaction(THandler, FromPid, ToPid) ->
     ok.
 
 
-parse_sdp(Request) ->
-    Body = binary_to_list(Request#request.body),
-    {ok, Sdp} = sdp:parse(Body),
-    [Media|_] = Sdp#sdp.media,
-    Conn = case Media#sdp_media.connection of
-	undefined ->
-	    Sdp#sdp.connection;
-	Conn1 ->
-	    Conn1
-    end,
-    Address = Conn#sdp_connection.address,
-    Port = Media#sdp_media.port,
-    {ok, Address, Port}.
+parse_sdp(Request) when is_record(Request, request) ->
+    parse_sdp(Request#request.body);
+
+parse_sdp(Response) when is_record(Response, response)->
+    parse_sdp(Response#response.body);
+
+parse_sdp(Body) when is_binary(Body) ->
+    parse_sdp(binary_to_list(Body));
+
+parse_sdp(Body) when is_list(Body) ->
+    case sdp:parse(Body) of
+	{ok, Sdp} ->
+	    [Media|_] = Sdp#sdp.media,
+	    Conn = case Media#sdp_media.connection of
+		       undefined ->
+			   Sdp#sdp.connection;
+		       Conn1 ->
+			   Conn1
+		   end,
+	    Address = Conn#sdp_connection.address,
+	    Port = Media#sdp_media.port,
+	    {ok, Address, Port};
+	{error, _Reason} ->
+	    error
+    end.
 
 execute(State) ->
     Call_to = "dumb/",
@@ -426,6 +438,14 @@ handle_info({call_proceeding, SipCall, Response}, outgoing=StateName, #state{sip
 	    ok = yate_call:ringing(Call);
 	183 ->
 	    ok = yate_call:progress(Call)
+    end,
+
+    case parse_sdp(Response) of
+	{ok, Remote_address, Remote_port} ->
+	    {ok, _Localip, _Localport} =
+		yate_call:start_rtp(Call, Remote_address, Remote_port);
+	error ->
+	    ok
     end,
 
     {next_state, StateName, State};
