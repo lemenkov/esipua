@@ -304,7 +304,9 @@ handle_call(progress, _From, State) ->
 		      [
 		       {message, "call.progress"},
  		       {id, Id},
-		       {module, "erlang"}
+		       {module, "erlang"},
+		       %% FIXME enable only if available.
+		       {media, yes}
 		      ]),
     
     {reply, ok, State};
