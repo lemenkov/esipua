@@ -7,7 +7,7 @@
 %% api
 -export([start_link/2, execute_link/2, answer/1, drop/2, drop/1,
 	 play_wave/3, play_tone/2, start_rtp/2, start_rtp/3,
-	 ringing/1, send_dtmf/2, stop/1]).
+	 ringing/1, progress/1, send_dtmf/2, stop/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -69,6 +69,9 @@ send_dtmf(Call, Dtmf) ->
 
 ringing(Call) ->
     gen_server:call(Call, ringing).
+
+progress(Call) ->
+    gen_server:call(Call, progress).
 
 stop(Call) ->
     gen_server:cast(Call, stop).
@@ -293,6 +296,19 @@ handle_call(ringing, _From, State) ->
     
     {reply, ok, State};
 
+handle_call(progress, _From, State) ->
+    Id = State#state.id,
+    Handle = State#state.handle,
+    {ok, _RetValue, _RetCmd} =
+	yate:send_msg(Handle, chan.masquerade,
+		      [
+		       {message, "call.progress"},
+ 		       {id, Id},
+		       {module, "erlang"}
+		      ]),
+    
+    {reply, ok, State};
+
 handle_call({send_dtmf, Dtmf}, _From, State) ->
     Id = State#state.id,
     Rtpid = State#state.rtpid,
@@ -423,11 +439,6 @@ setup_watches(State) ->
 		    end),
     ok = yate:watch(Handle, call.answered,
 		    fun(Cmd) ->
-			    Id == command:fetch_key(targetid, Cmd)
-		    end),
-    ok = yate:watch(Handle, call.drop,
-		    fun(Cmd) ->
-			    %% Check
 			    Id == command:fetch_key(targetid, Cmd)
 		    end),
     ok = yate:install(Handle, chan.dtmf,
