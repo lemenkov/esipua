@@ -320,7 +320,7 @@ handle_event(Request, StateName, State) ->
     {next_state, StateName, State}.
 
 
-handle_info({yate_call, execute, Call}, outgoing=StateName, State=#state{call=Call}) ->
+handle_info({yate_call, execute, Call}, outgoing=StateName, State=#state{call=Call, sip_call=undefined}) ->
     error_logger:info_msg("~p: execute ~p~n", [?MODULE, StateName]),
     Remote_addr = "192.168.0.1",
     {ok, State1} = start_rtp_receiver(State, Remote_addr),
@@ -416,9 +416,18 @@ handle_info({call_drop, SipCall, ExtraHeaders}, _StateName, #state{sip_call=SipC
     {stop, normal, State};
 
 
-handle_info({call_ringing, SipCall, Response}, outgoing=StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
+handle_info({call_proceeding, SipCall, Response}, outgoing=StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
     Call = State#state.call,
-    ok = yate_call:ringing(Call),
+
+    %% FIX parse sdp
+
+    case Response#response.status of
+	180 ->
+	    ok = yate_call:ringing(Call);
+	183 ->
+	    ok = yate_call:progress(Call)
+    end,
+
     {next_state, StateName, State};
 
 handle_info({call_redirect, SipCall, Response}, outgoing=StateName, #state{sip_call=SipCall}=State) when is_record(Response, response) ->
@@ -446,7 +455,7 @@ handle_info({'EXIT', _Pid, Reason}, _StateName, State) ->
     {stop, Reason, State};
 
 handle_info(Info, StateName, State) ->
-    error_logger:error_msg("~p: Unhandled info in ~p ~p~n",
+    error_logger:error_msg("~p: Unhandled info in info=~p state_name=~p~n",
 			   [?MODULE, Info, StateName]),
     {next_state, StateName, State}.
 

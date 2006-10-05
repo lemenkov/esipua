@@ -388,6 +388,12 @@ outgoing(drop, State) ->
     ExtraHeaders = [],
     Invite_pid ! {cancel, "hangup", ExtraHeaders},
 
+    {stop, normal, State};
+
+outgoing({drop, Status, Reason}, State) ->
+    Invite_pid = State#state.invite_pid,
+    ExtraHeaders = [{"Reason", [lists:concat(["SIP ;cause=", Status, " ;text=\"", Reason, "\""])]}],
+    Invite_pid ! {cancel, "hangup", ExtraHeaders},
     {stop, normal, State}.
 
 
@@ -693,10 +699,10 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response
     Owner = State#state.owner,
     if
 	%% TODO Handle all 101 <= Status <= 199
-	BranchState == proceeding, Status == 180 ->
+	BranchState == proceeding, Status >= 101, Status =< 199 ->
 	    {_Dialog, State1} = need_dialog(Response, State),
 
-	    Owner ! {call_ringing, self(), Response},
+	    Owner ! {call_proceeding, self(), Response},
 
             {next_state, StateName, State1};
         BranchState == terminated, Status >= 200, Status =< 299 ->
