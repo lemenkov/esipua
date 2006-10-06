@@ -507,6 +507,8 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 	    {next_state, StateName, State1}
     end;
 
+handle_info({branch_result, Pid, Branch, BranchState, {_Status, _Reason}=Response}, outgoing=StateName, #state{invite_pid = Pid, invite_branch = Branch} = State) ->
+    handle_invite_result(Pid, Branch, BranchState, Response, StateName, State);
 handle_info({new_response, Response, Origin, _LogStr}, StateName, State) when is_record(Origin, siporigin) ->
     case siphelper:cseq(Response#response.header) of
 	{CSeqNo, "INVITE"} when CSeqNo == State#state.invite_cseqno,
@@ -694,25 +696,31 @@ refresh_dialog_target_uac(Response, Dialog) when is_record(Response, response),
     Dialog#dialog{remote_target=RemoteTarget}.
 
 
-handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response, StateName, State) ->
+handle_invite_result(Pid, Branch, BranchState, {Status, Reason}=_Response, StateName, State) ->
+    handle_invite_result(Pid, Branch, BranchState, #response{status=Status, reason=Reason}, Status, Reason, StateName, State);
+
+handle_invite_result(Pid, Branch, BranchState, #response{status=Status, reason=Reason}=Response, StateName, State) ->
+    handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateName, State).
+
+handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateName, State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
     Owner = State#state.owner,
     if
 	%% TODO Handle all 101 <= Status <= 199
-	BranchState == proceeding, Status >= 101, Status =< 199 ->
+	Status >= 101, Status =< 199 ->
 	    {_Dialog, State1} = need_dialog(Response, State),
 
 	    Owner ! {call_proceeding, self(), Response},
 
             {next_state, StateName, State1};
-        BranchState == terminated, Status >= 200, Status =< 299 ->
+        Status >= 200, Status =< 299 ->
 	    logger:log(normal, "Answered dialog: ~p ~p", [BranchState, Status]),
 	    handle_invite_2xx(Pid, Branch, BranchState, Response, StateName, State);
-	BranchState == completed, Status >= 300, Status =< 399 ->
+	Status >= 300, Status =< 399 ->
 	    Owner ! {call_redirect, self(), Response},
             {stop, normal, State};
 
-	BranchState == completed, State#state.invite_cseqno == 1, Status == 401 orelse Status == 407 ->
+	State#state.invite_cseqno == 1, Status == 401 orelse Status == 407 ->
 	    Lookup = fun(Realm, From, To) ->
 			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),
  			     {ok, "2001", "test"}
@@ -733,18 +741,18 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status}=Response
 	    end;
 %% 	    {ok, Request} = siphelper:add_authorization(State#state.invite, Response),
 
-	BranchState == completed, Status >= 400, Status =< 699 ->
+	Status >= 400, Status =< 699 ->
 	    Owner ! {call_drop, self(), Response},
 
             {stop, normal, State};
         true ->
             logger:log(normal, "IGNORING response '~p ~p ~s' to my invite",
-		       [BranchState, Status, Response#response.reason]),
+		       [BranchState, Status, Reason]),
             {next_state, StateName, State}
     end.
 
 
-handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, State) ->
+handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, State) when is_record(Response, response) ->
 %%     case sipheader:dialogid(Response#response.header) of
 %% 	xxxx
 %%     Dialog =
@@ -827,7 +835,7 @@ do_send_invite(Request, State) ->
     end.
 
 
-need_dialog(Response, State) ->
+need_dialog(Response, State) when is_record(Response, response) ->
     Early = State#state.early_dialogs,
     case find_dialog(Response, Early) of
 	{ok, Dialog1} ->
