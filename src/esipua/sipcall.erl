@@ -13,14 +13,12 @@
 -module(sipcall).
 
 -behaviour(gen_fsm).
-%% -behaviour(yxa_app).
 
 
 %% api
 -export([
 	 start_link/3,
 	 stop/1,
-%% 	 call/3,
 	 build_invite/3,
 	 send_invite/2,
 	 receive_invite/3,
@@ -85,16 +83,6 @@ behaviour_info(callbacks) ->
     [{init, 1}];
 behaviour_info(_Other) ->
     undefined.
-
-
-%%
-%% YXA behaviour implementation
-%%
-%% init() ->
-%%     Server = {ysip_srv, {ysip_srv, start_link, [?HOST, ?PORT]},
-%% 	      permanent, 2000, worker, [ysip_srv]},
-%%     Tables = [],
-%%     [Tables, stateful, {append, [Server]}].
 
 
 terminate(_Mode) ->
@@ -190,18 +178,8 @@ receive_invite(Call, Request, OldPid) when is_pid(Call),
     gen_fsm:send_event(Call, {receive_invite, Request, OldPid}).
 
 
-%% start_link(Request, LogStr) when is_record(Request, request) ->
-%%     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
-%%     gen_fsm:start_link(?MODULE, [Request, LogStr, self()], []).
-
 start_link(Module, Args, Options) when is_atom(Module) ->
     gen_fsm:start_link(?MODULE, [Module, Args, Options, self()], Options).
-
-%% start_link(From, To, Body) when is_record(From, contact),
-%% 				is_record(To, contact),
-%% 				is_binary(Body) ->
-%%     logger:log(normal, "sipclient: start_link ~p~n", [self()]),
-%%     gen_fsm:start_link(?MODULE, [From, To, Body], []).
 
 drop(Call) ->
     gen_fsm:send_event(Call, drop).
@@ -257,74 +235,12 @@ init([Module, Args, Options, Owner]) when is_atom(Module) ->
     end.
 
 
-%% init([Request, LogStr, OldPid]) when is_record(Request, request) ->
-%%     case transactionlayer:adopt_st_and_get_branchbase(Request) of
-%% 	ignore ->
-%% 	    {stop, {error, ignore}};
-%% 	error ->
-%% 	    {stop, error};
-%% 	BranchBase ->
-%% 	    init2(Request, LogStr, BranchBase, OldPid)
-%%     end;
-
-
-%% Outgoing call
-%% init([Request]) when is_record(Request, request) ->
-%%     ok.
-
-
-
-
-%% init2(Request, LogStr, _BranchBase, OldPid) ->
-%%     logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
-%%     THandler = transactionlayer:get_handler_for_request(Request),
-%%     ok = transactionlayer:change_transaction_parent(THandler, OldPid, self()),
-%%     Invite_pid = transactionlayer:get_pid_from_handler(THandler),
-%%     State = #state{invite_req=Request, invite_pid=Invite_pid},
-%% %%     {ok, _TRef} = timer:send_after(20000, timeout),
-%%     execute(State).
-
-%% execute(State) ->
-%%     catch case a:'TODO'() of
-%% 	{error, {noroute}} ->
-%% 	    %% FIXME reason
-%% 	    ok = send_response(State, 404, "Not Found"),
-%% 	    {stop, normal};
-%% 	ok ->
-%% 	    execute_finish(State)
-%%     end.
-
-%% execute_finish(State) ->
-%%     ok = send_response(State, 101, "Dialog Establishment"),
-%%     {ok, State2} = setup(State),
-%%     {ok, incoming, State2}.
-
-
-%% setup(State) ->   
-%%     Request = State#state.invite_req,
-
-%%     %% FIXME Contact
-%%     Contact = "<sip:dummy@192.168.0.7:5080>",
-%%     throw(setup),
-%%     {ok, Dialog} = create_dialog(Request, Contact),
-
-%% %%     {ok, State1b} = startup(State, Id),
-%%     {ok, State#state{contact=Contact,dialog=Dialog}}.
-
-
 create_dialog(Request, Contact) ->
     THandler = transactionlayer:get_handler_for_request(Request),
     {ok, ToTag} = transactionlayer:get_my_to_tag(THandler),
     {ok, Dialog} = sipdialog:create_dialog_state_uas(Request, ToTag, Contact),
     ok = sipdialog:register_dialog_controller(Dialog, self()),
     {ok, Dialog}.
-
-%% TODO move 200ok to separate process and retransmitt
-%% send_200ok(State) ->
-%%     Body = "TODO",
-%%     ok = send_response(State, 200, "Ok", [], Body),
-%%     {ok, State}.
-
 
 adopt_transaction(THandler, FromPid, ToPid) ->
     logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
