@@ -100,7 +100,12 @@ setup(incoming, [Cmd], State) ->
     Handle = State#state.handle,
     ok = yate:watch(Handle, call.execute,
 		    fun(Cmd1) ->
-			    Id == command:fetch_key(id, Cmd1)
+			    case command:find_key(driver, Cmd1) of
+				{ok, _Driver} ->
+				    Id == command:fetch_key(id, Cmd1);
+				_ ->
+				    false
+			    end
 		    end),
     {ok, State#state{peerid=Id,status=incoming}};
 
