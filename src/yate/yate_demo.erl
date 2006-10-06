@@ -73,14 +73,6 @@ init([]) ->
 		      fun(_Cmd) ->
 			      true
 		      end),
-    ok = yate:watch(Handle, chan.startup,
-		      fun(_Cmd) ->
-			      true
-		      end),
-    ok = yate:watch(Handle, chan.rtp,
-		      fun(_Cmd) ->
-			      true
-		      end),
     {ok, #state{handle=Handle, client=Client}}.
 
 
@@ -158,6 +150,9 @@ handle_call_route("clock", Cmd, From, State) ->
     {noreply, State};
 handle_call_route("echo2", Cmd, From, State) ->
     yate:ret(From, Cmd, true, "erl/sipclient/call/sip:600@mulder"),
+    {noreply, State};
+handle_call_route("mulder3;" ++ Exten, Cmd, From, State) ->
+    yate:ret(From, Cmd, true, "erl/sipclient/call/sip:" ++ Exten ++ "@mulder"),
     {noreply, State};
 handle_call_route("mikael", Cmd, From, State) ->
     error_logger:info_msg("Route mikael~n"),
