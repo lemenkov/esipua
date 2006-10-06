@@ -74,17 +74,18 @@ handle_sync_event(_Event, _From, StateName, StateData) ->
 
 handle_info({yate_notify, Tag}, StateName, StateData) ->
     error_logger:info_msg("Notify ~p~n", [Tag]),
-    ok = yate_call:drop(StateData#sstate.call),
+    ok = yate_call:drop(StateData#sstate.call, noconn),
     {next_state, StateName, StateData};
 
 handle_info({yate_call, execute, _From}, _StateName, StateData) ->
     error_logger:info_msg("Call execute ~p. answer~n", [?MODULE]),
 
-    ok = yate_call:answer(StateData#sstate.call),
+%%    ok = yate_call:answer(StateData#sstate.call),
+    ok = yate_call:progress(StateData#sstate.call),
     ok = play_wave(StateData),
     {next_state, execute, StateData};
 
-handle_info({yate_call, disconnected, _From}, _StateName, StateData) ->
+handle_info({yate_call, disconnected, _Cmd, _From}, _StateName, StateData) ->
     {next_state, disconnected, StateData};
 
 handle_info({yate_call, hangup, _From}, _StateName, StateData) ->
@@ -124,8 +125,9 @@ record_wave(_Cmd, StateData) ->
 
 play_wave(StateData) ->
     Call = StateData#sstate.call,
-    yate_call:play_wave(Call, StateData#sstate.id,
+    ok = yate_call:play_wave(Call, StateData#sstate.id,
 			"/var/local/tmp/cvs/asterisk.net/sounds/digits/0.gsm").
+%%			"/var/local/tmp/cvs/asterisk.net/sounds/demo-congrats.gsm").
 
 
 %%     Handle = StateData#sstate.handle,
