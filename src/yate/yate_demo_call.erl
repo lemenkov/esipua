@@ -34,9 +34,6 @@ start_link(Client, Id, Cmd, From, Args) ->
     error_logger:info_msg("yate_demo_call start_link~n"),
     gen_fsm:start_link(yate_demo_call, [Client, Id, Cmd, From, Args], []).
 
-%% start(Client, Id, Cmd, Args) ->
-%%     gen_fsm:start(yate_demo_call, [Client, Id, Cmd, Args], []).
-
 %% gen_fsm
 init([Client, Id, ExecCmd, From, _Args]) ->
     error_logger:info_msg("Init call ~p~n", [Id]),
@@ -106,14 +103,6 @@ code_change(_OldVsn, StateName, StateData, _Extra)  ->
     {ok, StateName, StateData}.
 
 
-%% handle_message(chan.dtmf, req, Cmd, From, execute, StateData) ->
-%%     Text = command:fetch_key(text, Cmd),
-%%     handle_dtmf(Text, Cmd, From, execute, StateData);
-%% handle_dtmf(Text, Cmd, From, execute, StateData) ->
-%%     error_logger:info_msg("Call dtmf ~p~n", [Text]),
-%%     yate:ret(From, Cmd, true),
-%%     {next_state, execute, StateData}.
-
 record_wave(_Cmd, StateData) ->
 %%     Handle = StateData#sstate.handle,
 %%     TargetId = command:fetch_key(targetid, Cmd),
@@ -128,28 +117,3 @@ play_wave(StateData) ->
     ok = yate_call:play_wave(Call, StateData#sstate.id,
 			"/var/local/tmp/cvs/asterisk.net/sounds/digits/0.gsm").
 %%			"/var/local/tmp/cvs/asterisk.net/sounds/demo-congrats.gsm").
-
-
-%%     Handle = StateData#sstate.handle,
-%%     case  yate:send_msg(Handle, call.route,
-%% 					 [{called, "99991001"}]) of
-%% 	{ok, true, RetCmd} ->
-%% 	    Msg = RetCmd#command.header,
-%% 	    Retvalue = Msg#message.retvalue,
-%% 	    error_logger:info_msg("Route success ~p~n", [Retvalue]),
-%% 	    {ok, Ret2, RetCmd2} = yate:send_msg(Handle, chan.masquerade,
-%% 						[{message, "call.execute"},
-%% 						 {id, Peerid},
-%% 						 {callto, Retvalue}]),
-%% 	    error_logger:info_msg("Execute returns ~p~n", [Ret2]),
-%% 	    case Ret2 of
-%% 		true ->
-%% 		    Msg2 = RetCmd2#command.header,
-%% 		    Retvalue2 = Msg2#message.retvalue,
-%% 		    error_logger:info_msg("Execute ~p ~p~n", [Ret2, Retvalue2]);
-%% 		_ ->
-%% 		    ok
-%% 	    end;
-%% 	{ok, false, _RetCmd} ->
-%% 	    error_logger:info_msg("Route failed~n")
-%%     end,
