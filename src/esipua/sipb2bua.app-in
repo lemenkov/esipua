@@ -1,0 +1,14 @@
+{application, sipb2bua,
+ [{description, "SIP Back-2-Back User Agent (B2BUA)"},
+  {vsn,"0.0"},
+  {modules, [
+	     callregister,
+             sipcall
+            ]},
+  {registered, [
+		callregister
+               ]},
+  {mod, {sipserver, [sipb2bua]}},
+  {env, []},
+  {applications,
+        [kernel, stdlib]}]}.
