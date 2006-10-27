@@ -1,1 +1,1 @@
-SUBDIRS = yate yate-demo esipua
+SUBDIRS = yate yate_demo esipua
