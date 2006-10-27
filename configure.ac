@@ -28,6 +28,7 @@ AC_CONFIG_FILES([
 		 include/Makefile
 		 src/Makefile
 		 src/yate/Makefile
+		 src/yate-demo/Makefile
 		 src/esipua/Makefile
 		])
 
