@@ -162,7 +162,7 @@ handle_call_route("3002", Cmd, From, State) ->
     yate:ret(From, Cmd, true, "erl/sipclient/call/sip:2002@skinner.hem.za.org"),
     {noreply, State};
 handle_call_route("dial", Cmd, From, State) ->
-    yate:ret(From, Cmd, true, "sip/sip:99991001@192.168.0.7:5080"),
+    yate:ret(From, Cmd, true, "erl/sipclient/call/sip:99991001@192.168.0.7:5080"),
     {noreply, State};
 handle_call_route("ydial", Cmd, From, State) ->
     yate:ret(From, Cmd, true, "sip/sip:99991001@192.168.0.7:5072"),
