@@ -12,6 +12,9 @@
 %% api
 -export([start_link/0, stop/0, run/0]).
 
+%% debug
+-export([make/0]).
+
 %% gen_server callbacks
 -export([init/1,
 	 code_change/3,
@@ -174,3 +177,22 @@ handle_call_route(Called, Cmd, From, State) ->
     yate:ret(From, Cmd, false),
     error_logger:error_msg("Unhandled call.route to: ~p~n", [Called]),
     {noreply, State}.
+
+make() ->
+    Modules = [
+		"yate_clock",
+		"yate_demo_call",
+		"yate_demo",
+		"yate_demo_sup",
+		"yate_demo_app"
+	    ],
+
+    Prefix = "../../../src/yate_demo/",
+    Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
+
+    make:files(Files,
+	       [load,
+		{i, "../../../include"},
+		{i, "/usr/lib/yxa/include"},
+		{outdir, "../../src/yate_demo"},
+		debug_info]).
