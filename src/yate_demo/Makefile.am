@@ -3,6 +3,7 @@ bindir = $(erlangdir)/yate_demo-0.1/bin
 ebindir = $(erlangdir)/yate_demo-0.1/ebin
 
 erl_FILES = \
+yate_clock.erl \
 yate_demo_app.erl \
 yate_demo_call.erl \
 yate_demo.erl \

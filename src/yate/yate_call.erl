@@ -100,7 +100,7 @@ setup(incoming, [Cmd], State) ->
     Handle = State#state.handle,
     ok = yate:watch(Handle, call.execute,
 		    fun(Cmd1) ->
-			    case command:find_key(driver, Cmd1) of
+			    case command:find_key(module, Cmd1) of
 				{ok, _Driver} ->
 				    Id == command:fetch_key(id, Cmd1);
 				_ ->
@@ -311,7 +311,8 @@ handle_call(progress, _From, State) ->
  		       {id, Id},
 		       {module, "erlang"},
 		       %% FIXME enable only if available.
-		       {media, yes}
+		       {earlymedia, true},
+ 		       {media, yes}
 		      ]),
     
     {reply, ok, State};

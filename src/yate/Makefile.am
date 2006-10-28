@@ -12,7 +12,6 @@ key_dict.erl \
 key_list.erl \
 yate_app.erl \
 yate_call.erl \
-yate_clock.erl \
 yate_conn.erl \
 yate_conn_srv.erl \
 yate_decode.erl \

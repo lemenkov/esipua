@@ -7,7 +7,6 @@
              key_list,
 	     yate_app,
 	     yate_call,
-	     yate_clock,
 	     yate_conn,
 	     yate_conn_srv,
 	     yate_decode,

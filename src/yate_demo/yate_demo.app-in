@@ -5,7 +5,8 @@
 	     yate_demo_app,
 	     yate_demo_sup,
 	     yate_demo,
-	     yate_demo_call
+	     yate_demo_call,
+	     yate_clock
 	    ]},
   {registered, [
 		yate_demo_sup,

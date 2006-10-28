@@ -175,7 +175,6 @@ make() ->
 		"yate_port_srv",
 		"yate_port_sup",
 		"yate_pending",
-		"yate_clock",
 		"yate_call",
 		"yate_notify"
 	    ],
