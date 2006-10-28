@@ -44,3 +44,6 @@ EFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include
 
 %.boot: %.rel %.app
 	$(ERLC) $(EFLAGS) $<
+
+run:
+	$(ERL) $(ERLFLAGS) -name eryate -boot yate -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"'
