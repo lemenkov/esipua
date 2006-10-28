@@ -1,6 +1,6 @@
-erlangdir = $(libdir)/erlang
-bindir = $(erlangdir)/yate-0.1/bin
-ebindir = $(erlangdir)/yate-0.1/ebin
+erlangdir = $(libdir)/erlangb
+bindir = $(erlangdir)/yate_demo-0.1/bin
+ebindir = $(erlangdir)/yate_demo-0.1/ebin
 
 erl_FILES = \
 yate_demo_app.erl \
