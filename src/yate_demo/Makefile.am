@@ -14,7 +14,7 @@ ebin_DATA = $(beam_FILES) yate_demo.app yate_demo.boot
 EXTRA_DIST = $(erl_FILES) yate_demo.app-in yate_demo.rel
 CLEANFILES = $(beam_FILES) yate_demo.app yate_demo.boot yate_demo.script
 
-ERLFLAGS = 
+ERLFLAGS = -pz ../yate
 EFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include -pz ../yate
 
 %.beam: %.erl
@@ -25,3 +25,6 @@ EFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include -pz ../yate
 
 %.boot: %.rel %.app
 	$(ERLC) $(EFLAGS) $<
+
+run:
+	$(ERL) $(ERLFLAGS) -name eryate -boot yate_demo -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"'
