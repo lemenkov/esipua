@@ -112,7 +112,22 @@ terminate(_Reason, State) ->
 
 
 handle_command(message, req, Cmd, From, State) ->
-    handle_message((Cmd#command.header)#message.name, Cmd, From, State);
+    case handle_message((Cmd#command.header)#message.name, Cmd, From, State) of
+	{noreply, State1} ->
+	    {noreply, State1};
+	{reply, {Success, Retval}, State1} ->
+	    ok = yate:ret(From, Cmd, Success, Retval),
+	    {noreply, State1};
+	{reply, {Success, Retval, Cmd1}, State1} ->
+	    ok = yate:ret(From, Cmd1, Success, Retval),
+	    {noreply, State1};
+	{reply, Success, State1} when Success == false; Success == true->
+	    ok = yate:ret(From, Cmd, Success),
+	    {noreply, State1};
+	{stop, Reason, State1} ->
+	    {stop, Reason, State1}
+    end;
+
 handle_command(message, ans, _Cmd, _From, State) ->
     error_logger:info_msg("Ignore answer/watch.~n", []),
     {noreply, State}.
@@ -145,38 +160,28 @@ handle_call_execute(_Called, Cmd, From, State) ->
     {noreply, State}.
 
 
-handle_call_route("demo", Cmd, From, State) ->
-    yate:ret(From, Cmd, true, "erl/yate_demo_call/start"),
-    {noreply, State};
-handle_call_route("clock", Cmd, From, State) ->
-    yate:ret(From, Cmd, true, "erl/yate_clock/start"),
-    {noreply, State};
-handle_call_route("echo2", Cmd, From, State) ->
-    yate:ret(From, Cmd, true, "erl/sipclient/call/sip:600@mulder"),
-    {noreply, State};
-handle_call_route("mulder3;" ++ Exten, Cmd, From, State) ->
-    yate:ret(From, Cmd, true, "erl/sipclient/call/sip:" ++ Exten ++ "@mulder"),
-    {noreply, State};
-handle_call_route("mikael", Cmd, From, State) ->
+handle_call_route("demo", _Cmd, _From, State) ->
+    {reply, {true, "erl/yate_demo_call/start"}, State};
+handle_call_route("clock", _Cmd, _From, State) ->
+    {reply, {true, "erl/yate_clock/start"}, State};
+handle_call_route("echo2", _Cmd, _From, State) ->
+    {reply, {true, "erl/sipclient/call/sip:600@mulder"}, State};
+handle_call_route("mulder3;" ++ Exten, _Cmd, _From, State) ->
+    {reply, {true, "erl/sipclient/call/sip:" ++ Exten ++ "@mulder"}, State};
+handle_call_route("mikael", _Cmd, _From, State) ->
     error_logger:info_msg("Route mikael~n"),
-    yate:ret(From, Cmd, true, "sip/sip:1002@mulder"),
-    {noreply, State};
-handle_call_route("3002", Cmd, From, State) ->
-    yate:ret(From, Cmd, true, "erl/sipclient/call/sip:2002@skinner.hem.za.org"),
-    {noreply, State};
-handle_call_route("dial", Cmd, From, State) ->
-    yate:ret(From, Cmd, true, "erl/sipclient/call/sip:99991001@192.168.0.7:5080"),
-    {noreply, State};
-handle_call_route("ydial", Cmd, From, State) ->
-    yate:ret(From, Cmd, true, "sip/sip:99991001@192.168.0.7:5072"),
-    {noreply, State};
-handle_call_route("reason=" ++ ReasonStr, Cmd, From, State) ->
-    yate:ret(From, Cmd, true, "reason/" ++ ReasonStr),
-    {noreply, State};
-handle_call_route(Called, Cmd, From, State) ->
-    yate:ret(From, Cmd, false),
+    {reply, {true, "sip/sip:1002@mulder"}, State};
+handle_call_route("3002", _Cmd, _From, State) ->
+    {reply, {true, "erl/sipclient/call/sip:2002@skinner.hem.za.org"}, State};
+handle_call_route("dial", _Cmd, _From, State) ->
+    {reply, {true, "erl/sipclient/call/sip:99991001@192.168.0.7:5080"}, State};
+handle_call_route("ydial", _Cmd, _From, State) ->
+    {reply, {true, "sip/sip:99991001@192.168.0.7:5072"}, State};
+handle_call_route("reason=" ++ ReasonStr, _Cmd, _From, State) ->
+    {reply, {true, "reason/" ++ ReasonStr}, State};
+handle_call_route(Called, _Cmd, _From, State) ->
     error_logger:error_msg("Unhandled call.route to: ~p~n", [Called]),
-    {noreply, State}.
+    {reply, false, State}.
 
 make() ->
     Modules = [
