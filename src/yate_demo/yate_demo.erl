@@ -155,9 +155,9 @@ handle_call_execute("erl/" ++ String, Cmd, From, State) ->
 	    ok
     end,
     {noreply, State};
-handle_call_execute(_Called, Cmd, From, State) ->
-    yate:ret(From, Cmd, false),
-    {noreply, State}.
+handle_call_execute(Called, _Cmd, _From, State) ->
+%%     error_logger:info_msg("Unhandled call.execute to: ~p~n", [Called]),
+    {reply, false, State}.
 
 
 handle_call_route("demo", _Cmd, _From, State) ->
