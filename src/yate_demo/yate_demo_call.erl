@@ -36,7 +36,7 @@ start_link(Client, Id, Cmd, From, Args) ->
 
 %% gen_fsm
 init([Client, Id, ExecCmd, From, _Args]) ->
-    error_logger:info_msg("Init call ~p~n", [Id]),
+    error_logger:info_msg("~p ~p Init call ~p~n", [?MODULE, self(), Id]),
     {ok, Call} = yate_call:start_link(Client, ExecCmd),
     {ok, Handle} = yate:open(Client),
 
@@ -77,8 +77,7 @@ handle_info({yate_notify, Tag}, StateName, StateData) ->
 handle_info({yate_call, execute, _From}, _StateName, StateData) ->
     error_logger:info_msg("Call execute ~p. answer~n", [?MODULE]),
 
-%%    ok = yate_call:answer(StateData#sstate.call),
-    ok = yate_call:progress(StateData#sstate.call),
+    ok = yate_call:answer(StateData#sstate.call),
     ok = play_wave(StateData),
     {next_state, execute, StateData};
 
