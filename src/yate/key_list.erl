@@ -21,10 +21,29 @@ fetch(Key, Keys) ->
     end.
 
 
+%%
+%% Append List of keys to Keys
+%%
 append(List, undefined) ->
     List;
 append(List, Keys) ->
-    Keys ++ List.
+
+    Fun = fun({Key, _Value}=E, List2) ->
+		  case lists:keysearch(Key, 1, List2) of
+		      {value, E1} ->
+			  List3 = lists:keydelete(Key, 1, List2),
+			  {E1, List3};
+		      false ->
+			  {E, List2}
+		  end
+	  end,
+
+    case lists:mapfoldl(Fun, List, Keys) of
+	{Keys1, []} ->
+	    Keys1;
+	{Keys1, List1} ->
+	    Keys1 ++ List1
+    end.
 
 
 encode(Keys) ->
