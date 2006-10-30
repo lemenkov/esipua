@@ -43,10 +43,8 @@
 -include("sipsocket.hrl").
 
 init() ->
-    Callregister = {callregister, {callregister, start_link, []},
-		    permanent, 2000, worker, [callregister]},
     Tables = [],
-    [Tables, stateful, {append, [Callregister]}].
+    [Tables, stateful, {append, []}].
 
 request(#request{method="INVITE"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
     sipb2bua:start_link(Request, LogStr);

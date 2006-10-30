@@ -28,4 +28,4 @@ AM_ERLFLAGS = \
 AM_ERLCFLAGS = -I$(top_srcdir)/include -I../esipua -I/usr/lib/yxa/include
 
 run:
-	$(ERL) $(AM_ERLFLAGS) $(ERLFLAGS) -name eryate -boot sipb2bua -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -yxa_config sipb2bua.config
+	$(ERL) $(AM_ERLFLAGS) $(ERLFLAGS) -name eryate -boot sipb2bua -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -yxa_config sipb2bua.config -s appmon start
