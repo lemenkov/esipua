@@ -5,6 +5,8 @@ OPT_APP = esipua
 esipua_VSN = 1.0
 
 esipua_SRCS = \
+esipua_app.erl \
+esipua_sup.erl \
 callregister.erl \
 register_server.erl \
 register_sup.erl \

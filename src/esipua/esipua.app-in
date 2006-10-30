@@ -3,6 +3,8 @@
   {vsn,"0.0"},
   {modules, [
              callregister,
+             esipua_app,
+             esipua_sup,
              register_server,
              register_sup,
              sdp,
@@ -14,7 +16,7 @@
             ]},
   {registered, [
                ]},
-%%  {mod, {xxx, []}},
+  {mod, {esipua_app, []}},
   {env, []},
   {applications,
         [kernel, stdlib]}]}.
