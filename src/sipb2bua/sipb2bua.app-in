@@ -2,13 +2,18 @@
  [{description, "SIP Back-2-Back User Agent (B2BUA)"},
   {vsn,"0.0"},
   {modules, [
-	     callregister,
-             sipcall
+	     sipb2bua
             ]},
   {registered, [
-		callregister
+                sipserver_sup,
+                yxa_config,
+                logger,
+                ldap_client,
+                tcp_dispatcher,
+                sipsocket_udp,
+                transactionlayer
                ]},
   {mod, {sipserver, [sipb2bua]}},
   {env, []},
   {applications,
-        [kernel, stdlib]}]}.
+        [kernel, stdlib, esipua]}]}.
