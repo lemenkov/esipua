@@ -58,10 +58,8 @@
 init() ->
     Server = {ysip_srv, {ysip_srv, start_link, [?HOST, ?PORT]},
 	      permanent, 2000, worker, [ysip_srv]},
-    Callregister = {callregister, {callregister, start_link, []},
-		    permanent, 2000, worker, [callregister]},
     Tables = [],
-    [Tables, stateful, {append, [Server, Callregister]}].
+    [Tables, stateful, {append, [Server]}].
 
 request(#request{method="OPTIONS"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
     logger:log(normal, "sipclient: Options ~s", [LogStr]),

@@ -2,7 +2,6 @@
  [{description, "Yate sip server"},
   {vsn,"0.0"},
   {modules, [
-             sdp,
              sipclient,
              ysip_srv
             ]},
