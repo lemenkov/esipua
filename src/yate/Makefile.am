@@ -1,12 +1,14 @@
-erlangdir = $(libdir)/erlang
-bindir = $(erlangdir)/yate-0.1/bin
-ebindir = $(erlangdir)/yate-0.1/ebin
+include $(top_srcdir)/rules.mk
 
 bin_PROGRAMS = wrapper
 
 wrapper_SOURCES = wrapper.c
 
-erl_FILES = \
+OPT_APP = yate
+
+yate_VSN = 1.0
+
+yate_SRCS = \
 command.erl \
 key_dict.erl \
 key_list.erl \
@@ -26,23 +28,11 @@ yate_srv.erl \
 yate_test.erl \
 yate_util.erl
 
-beam_FILES = $(erl_FILES:.erl=.beam)
+AM_ERLFLAGS = 
+AM_ERLCFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include
 
-ebin_DATA = $(beam_FILES) yate.app yate.boot
-EXTRA_DIST = $(erl_FILES) yate.app-in yate.rel
-CLEANFILES = $(beam_FILES) yate.app yate.boot yate.script
-
-ERLFLAGS = 
-EFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include
-
-%.beam: %.erl
-	$(ERLC) $(EFLAGS) -I $(top_srcdir)/include $<
-
-%.app: %.app-in
-	cp $< $@
-
-%.boot: %.rel %.app
-	$(ERLC) $(EFLAGS) $<
+echo:
+	echo $(beam_FILES) $($(OPT_APP)_VSN)
 
 run:
-	$(ERL) $(ERLFLAGS) -name eryate -boot yate -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"'
+	$(ERL) $(AM_ERLFLAGS) -name eryate -boot yate -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"'
