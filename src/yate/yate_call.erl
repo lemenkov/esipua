@@ -8,7 +8,9 @@
 -export([
 	 start_link/2,
 	 start_link/3,
-	 execute_link/2, answer/1, drop/2, drop/1,
+	 execute_link/2,
+	 execute_link/3,
+	 answer/1, drop/2, drop/1,
 	 play_wave/3, play_tone/2, start_rtp/2, start_rtp/3,
 	 ringing/1, progress/1, send_dtmf/2, stop/1]).
 
@@ -35,15 +37,13 @@ start_link(Client, Cmd) ->
     start_link(Client, Cmd, self()).
 
 start_link(Client, Cmd, Owner) ->
-    %% Can't use gen_server:start_link, since we need to trap exit
-    %% from our parent.
     gen_server:start_link(?MODULE, [Client, Cmd, Owner], []).
 
 execute_link(Client, Keys) ->
-    %% Can't use gen_server:start_link, since we need to trap exit
-    %% from our parent.
-    gen_server:start(?MODULE, [Client, Keys, self()], []).
+    execute_link(Client, Keys, self()).
 
+execute_link(Client, Keys, Owner) ->
+    gen_server:start_link(?MODULE, [Client, Keys, Owner], []).
 
 answer(Call) ->
     gen_server:call(Call, answer).
