@@ -140,6 +140,12 @@ handle_info({cast, {ans, RetValue, RetCmd}, {queue, Pid, Tag}}, State) ->
 handle_info({cast, {ans, RetValue, RetCmd}, {send, From}}, State) ->
     gen_server:reply(From, {ok, RetValue, RetCmd}),
     {noreply, State};
+handle_info({'EXIT', Conn, normal}, #sstate{conn=Conn}=State) -> 
+    error_logger:info_msg("~p: Conn exit normal, ignore~n", [?MODULE]),
+    {noreply, State};
+handle_info({'EXIT', Conn, Reason}, #sstate{conn=Conn}=State) ->
+    error_logger:error_msg("~p: Conn exit ~p exit~n", [?MODULE, Reason]),
+    {stop, Reason, State};
 handle_info({'EXIT', Pid, Reason}, State) ->
     case uninstall_pid(Pid, State) of
 	{ok, State1} ->
