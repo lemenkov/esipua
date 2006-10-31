@@ -20,6 +20,21 @@ AC_PROG_LN_S
 AC_ERLANG_NEED_ERLC
 AC_ERLANG_PATH_ERL
 AC_ERLANG_SUBST_INSTALL_LIB_DIR
+AC_ERLANG_CHECK_LIB(kernel)
+AC_ERLANG_CHECK_LIB(stdlib)
+AC_ERLANG_CHECK_LIB(sasl)
+
+AC_DEFUN([AC_ERLANG_LIB_VER],
+[AC_CACHE_CHECK([Erlang/OTP '$1' library version], [erlang_cv_lib_ver_$1],
+   [if test "$ERLANG_LIB_VER_$1" = ""; then
+       erlang_cv_lib_ver_$1=`echo "$ERLANG_LIB_DIR_$1"|sed -e "s/.*-\(.*\)/\1/"`
+    fi])
+AC_SUBST([ERLANG_LIB_VER_$1], [$erlang_cv_lib_ver_$1])
+]) # AC_ERLANG_LIB_VER
+
+AC_ERLANG_LIB_VER(kernel)
+AC_ERLANG_LIB_VER(stdlib)
+AC_ERLANG_LIB_VER(sasl)
 
 dnl AC_PATH_PROGS([ERLC],[erlc],,[$path])
 dnl AC_PATH_PROGS([ERL],[erl],,[$path])
