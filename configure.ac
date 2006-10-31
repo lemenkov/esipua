@@ -13,6 +13,7 @@ AM_INIT_AUTOMAKE
 dnl AM_CONFIG_HEADER([config.h])
 
 AC_ARG_VAR([ERL_FLAGS], [Erlang/OTP emulator flags [none]])dnl
+AC_ARG_VAR([YATE], [Yate - Yet Another Telephony Engine])dnl
 
 # Checks for programs.
 AC_PROG_CC
@@ -25,6 +26,7 @@ AC_ERLANG_SUBST_INSTALL_LIB_DIR
 AC_ERLANG_CHECK_LIB(kernel)
 AC_ERLANG_CHECK_LIB(stdlib)
 AC_ERLANG_CHECK_LIB(sasl)
+AC_PATH_PROGS([YATE], [yate],,[$PATH])
 
 dnl AC_ERLANG_CHECK_LIB(yxa)
 

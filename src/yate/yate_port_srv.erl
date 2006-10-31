@@ -7,6 +7,8 @@
 %%%
 -module(yate_port_srv).
 
+-include("yate_generated.hrl").
+
 -behaviour(gen_server).
 
 %% api
@@ -23,8 +25,6 @@
 -record(sstate, {pid, port, state=startup, waiting=[]}).
 
 -define(SERVER, ?MODULE).
-%% -define(PROG, "./wrapper /usr/bin/yate -vvvvvvvvv").
--define(PROG, "../yate/wrapper /home/mikael/tmp/cvs/yate/build_linux ./run -vvvvvvvvv").
 -define(TIMEOUT_5S, 5000).
 
 
@@ -57,7 +57,14 @@ stop() ->
 %% gen_server callbacks
 %%
 init([]) ->
-    Port = erlang:open_port({spawn, ?PROG},
+    Dirname = filename:dirname(?YATE),
+    Basename = filename:basename(?YATE),
+    error_logger:info_msg("~p: Before wrapper~n", [?MODULE]),
+    Wrapper = get_wrapper(),
+    Args = "-vvvvvvvvv",
+    Prog = Wrapper ++ " " ++ Dirname ++ " " ++ Basename ++ " " ++ Args,
+    error_logger:info_msg("~p: Prog ~p~n", [?MODULE, Prog]),
+    Port = erlang:open_port({spawn, Prog},
 			    [exit_status, stream,
 			     stderr_to_stdout, {line, 80}]),
     {ok, _TRef} = timer:send_after(?TIMEOUT_5S, timeout),
@@ -147,3 +154,22 @@ kill(Pid) when is_integer(Pid) ->
     ok;
 kill(undefined) ->
     error.
+
+%%
+%% Internal functions
+%%
+
+get_wrapper() ->
+    UninstWrapper = "../yate/wrapper",
+    case filelib:is_file(UninstWrapper) of
+	true ->
+	    UninstWrapper;
+	false ->
+	    case code:lib_dir(yate) of
+		{error, Reason} ->
+		    exit(Reason);
+		LibDir ->
+		    BinDir = filename:absname_join(LibDir, "bin"),
+		    filename:absname_join(BinDir, "wrapper")
+	    end
+    end.
