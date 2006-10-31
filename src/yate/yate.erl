@@ -163,6 +163,7 @@ make() ->
 		"command",
 		"key_dict",
 		"key_list",
+		"yate_call_reg",
 		"yate_srv",
 		"yate_conn",
 		"yate_encode",
