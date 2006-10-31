@@ -12,6 +12,8 @@ AM_INIT_AUTOMAKE
 
 dnl AM_CONFIG_HEADER([config.h])
 
+AC_ARG_VAR([ERL_FLAGS], [Erlang/OTP emulator flags [none]])dnl
+
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_AWK
@@ -23,6 +25,8 @@ AC_ERLANG_SUBST_INSTALL_LIB_DIR
 AC_ERLANG_CHECK_LIB(kernel)
 AC_ERLANG_CHECK_LIB(stdlib)
 AC_ERLANG_CHECK_LIB(sasl)
+
+dnl AC_ERLANG_CHECK_LIB(yxa)
 
 AC_DEFUN([AC_ERLANG_LIB_VER],
 [AC_CACHE_CHECK([Erlang/OTP '$1' library version], [erlang_cv_lib_ver_$1],
@@ -39,6 +43,8 @@ AC_ERLANG_LIB_VER(sasl)
 dnl AC_PATH_PROGS([ERLC],[erlc],,[$path])
 dnl AC_PATH_PROGS([ERL],[erl],,[$path])
 dnl AC_LANG_PUSH(C++)
+
+AC_SUBST(ERL_FLAGS)
 
 AC_CONFIG_FILES([
 		 Makefile
