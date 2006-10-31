@@ -5,4 +5,5 @@
   {sasl,"@ERLANG_LIB_VER_sasl@"},
   {yate, "0.0"},
   {yate_demo, "0.0"},
+  {esipua, "0.0"},
   {sipclient, "0.0"}]}.

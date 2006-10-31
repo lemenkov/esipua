@@ -121,8 +121,8 @@ init([]) ->
 init([Client, Request, LogStr, OldPid]) ->
     init2(Client, Request, LogStr, OldPid);
 
-init([Client, _Id, Cmd, From, [SipUri]]) ->
-    {ok, Call} = yate_call:start_link(Client, Cmd),
+init([Client, Id, Cmd, From, [SipUri]]) ->
+    {ok, Call} = yate_call_reg:get_call(Client, Id, Cmd),
     {ok, Handle} = yate:open(Client),
 
     NewCmd = command:append_keys([
@@ -235,7 +235,7 @@ execute(State) ->
 		[{callername, Caller_name1}]
 	end,
 
-    case catch yate_call:execute_link(State#state.client,
+    case catch yate_call_reg:execute_call(State#state.client,
 			       [
 				{caller, Caller},
 				{callto, Call_to},
@@ -591,25 +591,19 @@ reason_to_sipstatus2(Reason) ->
 
 make() ->
     Modules = [
-	        "callregister",
-	        "register_server",
-	        "register_sup",
-		"sdp",
-		"sipcall",
-		"sipcall_bye",
 		"sipclient",
-		"sipregister",
-	        "siptest",
-	        "siphelper",
 		"ysip_srv"
 	    ],
 
-    Prefix = "../../../src/esipua/",
+    Prefix = "../../../src/sipclient/",
     Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
 
     make:files(Files,
 	       [load,
 		{i, "../../../include"},
+		{i, "../../../src/yate"},
+		{i, "../../../src/esipua"},
+		{i, "../../../src/esipua"},
 		{i, "/usr/lib/yxa/include"},
-		{outdir, "../../src/esipua"},
+		{outdir, "../../src/sipclient"},
 		debug_info]).
