@@ -8,7 +8,7 @@
 -behaviour(gen_fsm).
 
 %% api
--export([start_link/5, start/4]).
+-export([start_link/5, start_link/4]).
 
 %% gen_fsm
 -export([code_change/4, handle_event/3, handle_info/3, handle_sync_event/4,
@@ -20,7 +20,7 @@
 
 -define(TIMEOUT_WAIT_EXEC, 10000). %% 10s
 
-start(Client, Cmd, From, Args) ->
+start_link(Client, Cmd, From, Args) ->
     Id = command:fetch_key(id, Cmd),
     start_link(Client, Id, Cmd, From, Args).
 
@@ -37,7 +37,7 @@ start_link(Client, Id, Cmd, From, Args) ->
 %% gen_fsm
 init([Client, Id, ExecCmd, From, _Args]) ->
     error_logger:info_msg("~p ~p Init call ~p~n", [?MODULE, self(), Id]),
-    {ok, Call} = yate_call:start_link(Client, ExecCmd),
+    {ok, Call} = yate_call_reg:get_call(Client, Id, ExecCmd),
     {ok, Handle} = yate:open(Client),
 
     NewCmd = command:append_keys([

@@ -8,7 +8,7 @@
 -behaviour(gen_server).
 
 %% api
--export([start_link/5, start/4]).
+-export([start_link/4, start_link/5, start/4]).
 
 %% gen_fsm
 -export([code_change/3, handle_call/3, handle_cast/2, handle_info/2,
@@ -26,6 +26,10 @@
 start(Client, Cmd, From, Args) ->
     Id = command:fetch_key(id, Cmd),
     start(Client, Id, Cmd, From, Args).
+
+start_link(Client, Cmd, From, Args) ->
+    Id = command:fetch_key(id, Cmd),
+    start_link(Client, Id, Cmd, From, Args).
 
 start(Client, Id, Cmd, From, Args) ->
     gen_server:start(yate_clock, [Client, Id, Cmd, From, Args], []).
@@ -47,7 +51,7 @@ init([Client, Id, ExecCmd, From, _Args]) ->
     error_logger:info_msg("Waves ~p~n", [Waves]),
     error_logger:info_msg("Init clock ~p~n", [Id]),
 
-    {ok, Call} = yate_call:start_link(Client, ExecCmd),
+    {ok, Call} = yate_call_reg:get_call(Client, Id, ExecCmd),
     {ok, Handle} = yate:open(Client),
 
     NewCmd = command:append_keys([

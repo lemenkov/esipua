@@ -161,24 +161,9 @@ handle_call_execute(Called, _Cmd, _From, State) ->
 
 
 handle_call_route("demo", _Cmd, _From, State) ->
-    {reply, {true, "erl/yate_demo_call/start"}, State};
+    {reply, {true, "erl/yate_demo_call/start_link"}, State};
 handle_call_route("clock", _Cmd, _From, State) ->
-    {reply, {true, "erl/yate_clock/start"}, State};
-handle_call_route("echo2", _Cmd, _From, State) ->
-    {reply, {true, "erl/sipclient/call/sip:600@mulder"}, State};
-handle_call_route("mulder3;" ++ Exten, _Cmd, _From, State) ->
-    {reply, {true, "erl/sipclient/call/sip:" ++ Exten ++ "@mulder"}, State};
-handle_call_route("mikael", _Cmd, _From, State) ->
-    error_logger:info_msg("Route mikael~n"),
-    {reply, {true, "sip/sip:1002@mulder"}, State};
-handle_call_route("3002", _Cmd, _From, State) ->
-    {reply, {true, "erl/sipclient/call/sip:2002@skinner.hem.za.org"}, State};
-handle_call_route("dial", _Cmd, _From, State) ->
-    {reply, {true, "erl/sipclient/call/sip:99991001@192.168.0.7:5080"}, State};
-handle_call_route("ydial", _Cmd, _From, State) ->
-    {reply, {true, "sip/sip:99991001@192.168.0.7:5072"}, State};
-handle_call_route("reason=" ++ ReasonStr, _Cmd, _From, State) ->
-    {reply, {true, "reason/" ++ ReasonStr}, State};
+    {reply, {true, "erl/yate_clock/start_link"}, State};
 handle_call_route(Called, _Cmd, _From, State) ->
     error_logger:error_msg("Unhandled call.route to: ~p~n", [Called]),
     {reply, false, State}.
@@ -197,7 +182,6 @@ make() ->
 
     make:files(Files,
 	       [load,
-		{i, "../../../include"},
-		{i, "/usr/lib/yxa/include"},
+		{i, "../../../src/yate"},
 		{outdir, "../../src/yate_demo"},
 		debug_info]).
