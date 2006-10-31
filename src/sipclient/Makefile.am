@@ -27,7 +27,7 @@ AM_ERLFLAGS = \
 -pz $(YXABUILDDIR)/src/transportlayer \
 -pz $(YXABUILDDIR)/src/event_handler
 
-AM_ERLCFLAGS = -I$(top_srcdir)/include -I../yate_demo -I/usr/lib/yxa/include
+AM_ERLCFLAGS = -I$(srcdir)/../yate -I$(srcdir)/../esipua -I/usr/lib/yxa/include
 
 run:
 	$(ERL) $(AM_ERLFLAGS) $(ERLFLAGS) -name eryate -boot sipclient -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -yxa_config sipclient.config

@@ -17,6 +17,10 @@ siphelper.erl \
 sipregister.erl \
 siptest.erl
 
+esipua_HDRS = \
+sdp.hrl \
+sipclient.hrl
+
 YXABUILDDIR = /home/mikael/tmp/cvs/yxa/build_linux
 AM_ERLFLAGS = \
 -pz $(YXABUILDDIR) \

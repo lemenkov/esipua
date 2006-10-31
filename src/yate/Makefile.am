@@ -26,7 +26,10 @@ yate_port_sup.erl \
 yate_reg_srv.erl \
 yate_srv.erl \
 yate_test.erl \
-yate_util.erl
+yate_util.erl \
+yate_srv.hrl
+
+yate_HDRS = yate.hrl
 
 AM_ERLFLAGS = 
 AM_ERLCFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include

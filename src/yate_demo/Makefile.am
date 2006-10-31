@@ -12,7 +12,7 @@ yate_demo.erl \
 yate_demo_sup.erl
 
 AM_ERLFLAGS = -pz ../yate
-AM_ERLCFLAGS = -I$(top_srcdir)/include -pz ../yate
+AM_ERLCFLAGS = -I$(srcdir)/../yate
 
 run:
 	$(ERL) $(AM_ERLFLAGS) $(ERLFLAGS) -name eryate -boot yate_demo -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"'
