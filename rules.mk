@@ -20,10 +20,10 @@ SUBST = sed \
 	$(SUBST) $< > $@
 
 %.beam: %.erl
-	$(ERLC) $(AM_ERLFLAGS) $(ERLFLAGS) $(AM_ERLCFLAGS) $(ERLCFLAGS) $<
+	$(ERLC) $(AM_ERL_FLAGS) $(ERL_FLAGS) $(AM_ERLCFLAGS) $(ERLCFLAGS) $<
 
 %.app: %.app-in
 	cp $< $@
 
 %.boot: %.rel %.app
-	$(ERLC) $(AM_ERLFLAGS) $(ERLFLAGS) $(AM_ERLCFLAGS) $(ERLCFLAGS) $<
+	$(ERLC) $(AM_ERL_FLAGS) $(ERL_FLAGS) $(AM_ERLCFLAGS) $(ERLCFLAGS) $<

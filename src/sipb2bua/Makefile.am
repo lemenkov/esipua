@@ -8,7 +8,7 @@ sipb2bua_SRCS = \
 sipb2bua.erl
 
 YXABUILDDIR = /home/mikael/tmp/cvs/yxa/build_linux
-AM_ERLFLAGS = \
+AM_ERL_FLAGS = \
 -pz ../esipua \
 -pz $(YXABUILDDIR) \
 -pz $(YXABUILDDIR)/src \
@@ -28,4 +28,4 @@ AM_ERLFLAGS = \
 AM_ERLCFLAGS = -I$(top_srcdir)/include -I../esipua -I/usr/lib/yxa/include
 
 run:
-	$(ERL) $(AM_ERLFLAGS) $(ERLFLAGS) -name eryate -boot sipb2bua -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -yxa_config sipb2bua.config -s appmon start
+	$(ERL) $(AM_ERL_FLAGS) $(ERL_FLAGS) -name eryate -boot sipb2bua -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -yxa_config sipb2bua.config -s appmon start

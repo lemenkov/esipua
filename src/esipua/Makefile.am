@@ -22,7 +22,7 @@ sdp.hrl \
 sipclient.hrl
 
 YXABUILDDIR = /home/mikael/tmp/cvs/yxa/build_linux
-AM_ERLFLAGS = \
+AM_ERL_FLAGS = \
 -pz $(YXABUILDDIR) \
 -pz $(YXABUILDDIR)/src \
 -pz $(YXABUILDDIR)/src/cpl \
@@ -42,4 +42,4 @@ AM_ERLCFLAGS = -I$(top_srcdir)/include -I/usr/lib/yxa/include
 # -I../yate_demo 
 
 run:
-	$(ERL) $(AM_ERLFLAGS) $(ERLFLAGS) -name eryate -boot esipua -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -s appmon start
+	$(ERL) $(AM_ERL_FLAGS) $(ERL_FLAGS) -name eryate -boot esipua -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -s appmon start

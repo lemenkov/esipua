@@ -31,11 +31,10 @@ yate_srv.hrl
 
 yate_HDRS = yate.hrl
 
-AM_ERLFLAGS = 
-AM_ERLCFLAGS = $(ERLFLAGS) -I$(top_srcdir)/include
+AM_ERLCFLAGS = -I$(top_srcdir)/include
 
 echo:
 	echo $(beam_FILES) $($(OPT_APP)_VSN)
 
 run:
-	$(ERL) $(AM_ERLFLAGS) -name eryate -boot yate -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"'
+	$(ERL) $(AM_ERL_FLAGS) $(ERL_FLAGS) -name eryate -boot yate -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"'
