@@ -6,10 +6,12 @@
 
 %% api
 -export([
+	 start_link/1,
 	 start_link/2,
 	 start_link/3,
-	 execute_link/2,
-	 execute_link/3,
+%% 	 execute_link/2,
+%% 	 execute_link/3,
+	 execute/2,
 	 answer/1, drop/2, drop/1,
 	 play_wave/3, play_tone/2, start_rtp/2, start_rtp/3,
 	 ringing/1, progress/1, send_dtmf/2, stop/1]).
@@ -33,17 +35,26 @@
 	  status				% incoming or outgoing
 	 }).
 
+start_link(Client) when is_pid(Client) ->
+    start_link(Client, self()).
+
+start_link(Client, Owner) when is_pid(Client), is_pid(Owner) ->
+    gen_server:start_link(?MODULE, [Client, Owner], []);
+
 start_link(Client, Cmd) ->
     start_link(Client, Cmd, self()).
 
 start_link(Client, Cmd, Owner) ->
     gen_server:start_link(?MODULE, [Client, Cmd, Owner], []).
 
-execute_link(Client, Keys) ->
-    execute_link(Client, Keys, self()).
+%% execute_link(Client, Keys) ->
+%%     execute_link(Client, Keys, self()).
 
-execute_link(Client, Keys, Owner) ->
-    gen_server:start_link(?MODULE, [Client, Keys, Owner], []).
+%% execute_link(Client, Keys, Owner) ->
+%%     gen_server:start_link(?MODULE, [Client, Keys, Owner], []).
+
+execute(Call, Keys) ->
+    gen_server:call(Call, {execute, Keys}).
 
 answer(Call) ->
     gen_server:call(Call, answer).
@@ -85,12 +96,14 @@ stop(Call) ->
 %%
 %% gen_server callbacks
 %%
+init([Client, Parent]) ->
+    init_common(outgoing, Client, [], Parent);
+
 init([Client, Cmd, Parent]) when is_record(Cmd, command) ->
-    init_common(incoming, Client, [Cmd], Parent);
+    init_common(incoming, Client, [Cmd], Parent).
 
-init([Client, Keys, Parent]) when is_list(Keys) ->
-    init_common(outgoing, Client, [Keys], Parent).
-
+%% init([Client, Keys, Parent]) when is_list(Keys) ->
+%%     init_common(outgoing, Client, [Keys], Parent).
 
 init_common(Status, Client, Args, Parent) ->
     error_logger:info_msg("~p: ~p ~p~n", [?MODULE, self(), Status]),
@@ -115,25 +128,8 @@ setup(incoming, [Cmd], State) ->
 		    end),
     {ok, State#state{peerid=Id,status=incoming}};
 
-setup(outgoing, [Keys], State) ->
-    Handle = State#state.handle,
-    Parent = State#state.parent,
-    {ok, RetValue, RetCmd} = yate:send_msg(Handle, call.execute, Keys),
-    case RetValue of
-	false ->
-	    %% TODO return false
-	    Parent ! {yate_call, notfound, self()},
-	    {stop, {noroute, RetCmd}};
-	true ->
-	    {ok, Auto} = fetch_auto_keys(RetCmd),
-	    Id = command:fetch_key(id, RetCmd),
-	    Peerid = command:fetch_key(peerid, RetCmd),
-	    State1 = State#state{id=Id,peerid=Peerid,status=outgoing},
-%% 	    {ok, State2} = setup(State1),
-	    ok = setup_watches(State1),
-	    Parent ! {yate_call, Auto, RetCmd, self()},
-	    {ok, State1}
-    end.
+setup(outgoing, [], State) ->
+    {ok, State}.
 
 
 fetch_auto_keys(Cmd) ->	    
@@ -163,6 +159,30 @@ fetch_auto_keys(Cmd, [Key|R], Res) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+handle_call({execute, Keys}, _From, State) ->
+    Handle = State#state.handle,
+    Parent = State#state.parent,
+    %% TODO async msg
+    {ok, RetValue, RetCmd} = yate:send_msg(Handle, call.execute, Keys),
+    case RetValue of
+	false ->
+	    %% TODO return false
+%% 	    Parent ! {yate_call, notfound, self()},
+%% 	    {stop, normal, State};
+	    %% TODO change to error state?
+	    {reply, {error, {noroute, RetCmd}}, State};
+	true ->
+	    {ok, Auto} = fetch_auto_keys(RetCmd),
+	    Id = command:fetch_key(id, RetCmd),
+	    Peerid = command:fetch_key(peerid, RetCmd),
+	    State1 = State#state{id=Id,peerid=Peerid,status=outgoing},
+%% 	    {ok, State2} = setup(State1),
+	    ok = setup_watches(State1),
+	    Parent ! {yate_call, Auto, RetCmd, self()},
+	    {reply, ok, State1}
+    end;
+
 
 handle_call(answer, _From, State) ->
     Id = State#state.id,

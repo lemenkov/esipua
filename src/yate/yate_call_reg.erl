@@ -10,7 +10,7 @@
 	 unregister_call/1,
 	 get_call/1,
 	 get_call/3,
-	 execute_call/2
+	 execute_call/1
 	]).
 
 %% gen_server callbacks
@@ -45,8 +45,8 @@ get_call(Id) ->
 get_call(Client, Id, ExecCmd) ->
     gen_server:call(?SERVER, {get_call, Client, Id, ExecCmd, self()}).
 
-execute_call(Client, Keys) ->
-    gen_server:call(?SERVER, {execute_call, Client, Keys, self()}).
+execute_call(Client) ->
+    gen_server:call(?SERVER, {execute_call, Client, self()}).
 
 %%
 %% gen_server callbacks
@@ -81,17 +81,13 @@ handle_call({get_call, Client, Id, ExecCmd, Owner}, _From, State) ->
 	    {reply, {ok, Call}, State#state{calls=Calls1}}
     end;
 
-handle_call({execute_call, Client, Keys, Owner}, _From, State) ->
+handle_call({execute_call, Client, Owner}, _From, State) ->
     Calls = State#state.calls,
-    case yate_call:execute_link(Client, Keys, Owner) of
-	{ok, Call} ->
-	    Calls1 = [{outgoing, Call}|Calls],
+    {ok, Call} = yate_call:start_link(Client, Owner),
+    Calls1 = [{outgoing, Call}|Calls],
 
-	    %% TODO save user pid
-	    {reply, {ok, Call}, State#state{calls=Calls1}};
-	{error, Reason} ->
-	    {reply, {error, Reason}, State}
-    end;
+    %% TODO save user pid
+    {reply, {ok, Call}, State#state{calls=Calls1}};
 
 handle_call({register_call, Id, Call}, _From, State) ->
     Calls = State#state.calls,

@@ -235,7 +235,9 @@ execute(State) ->
 		[{callername, Caller_name1}]
 	end,
 
-    case catch yate_call_reg:execute_call(State#state.client,
+    {ok, Call} = yate_call_reg:execute_call(State#state.client),
+
+    case catch yate_call:execute(Call,
 			       [
 				{caller, Caller},
 				{callto, Call_to},
@@ -247,7 +249,7 @@ execute(State) ->
 	    %% FIXME reason, drop sip_call
 %% 	    ok = send_response(State, 404, "Not Found"),
 	    {stop, normal};
-	{ok, Call} ->
+	ok ->
 	    execute_finish(Call, State)
     end.
 
