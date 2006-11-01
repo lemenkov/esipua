@@ -15,6 +15,10 @@
              siptest
             ]},
   {registered, [
+             callregister,
+             esipua_sup,
+             register_server,
+             register_sup
                ]},
   {mod, {esipua_app, []}},
   {env, []},

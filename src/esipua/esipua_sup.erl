@@ -42,7 +42,9 @@ start_link() ->
 init([]) ->
     Callregister = {callregister, {callregister, start_link, []},
                     permanent, 2000, worker, [callregister]},
-    {ok,{{one_for_one,0,1}, [Callregister]}}.
+    RegisterSupSpec = {register_sup, {register_sup, start_link, []},
+		       permanent, 2000, worker, [register_sup]},
+    {ok,{{one_for_one,0,1}, [Callregister, RegisterSupSpec]}}.
 
 %%====================================================================
 %% Internal functions

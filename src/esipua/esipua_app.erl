@@ -12,6 +12,8 @@
 %% Application callbacks
 -export([start/2, stop/1]).
 
+-export([make/0]).
+
 %%====================================================================
 %% Application callbacks
 %%====================================================================
@@ -41,6 +43,31 @@ start(_Type, []) ->
 %%--------------------------------------------------------------------
 stop(_State) ->
     ok.
+
+make() ->
+    Modules = [
+		"esipua_app",
+		"esipua_sup",
+		"callregister",
+		"register_server",
+		"register_sup",
+		"sdp",
+		"sipcall_bye",
+		"sipcall",
+		"siphelper",
+		"sipregister",
+		"siptest"
+	    ],
+
+    Prefix = "../../../src/esipua/",
+    Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
+
+    make:files(Files,
+	       [load,
+		{i, "../../../include"},
+		{i, "/usr/lib/yxa/include"},
+		{outdir, "../../src/esipua"},
+		debug_info]).
 
 %%====================================================================
 %% Internal functions
