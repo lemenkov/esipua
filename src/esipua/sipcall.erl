@@ -31,14 +31,11 @@
 	 answer/3,
 	 drop/1,
 	 drop/3
-%%call/1
 	]).
 
 %% YXA behaviour
 -export([
-%% 	 init/0,
 	 terminate/1,
-%% 	 request/3,
 	 response/3
 	]).
 
@@ -62,8 +59,6 @@
 -record(state, {dialog,				% Final SIP Dialog
 		owner,
 		early_dialogs=[],		% List of early dialogs
-%% 		module,				% Behaviour module
-%% 		options,			% Behaviour options
 		invite_req,			% In/out INVITE request
 		invite_pid,			% In/out INVITE pid
 		invite_branch,			% Outgoing INVITE branch
@@ -115,17 +110,6 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
     end,
     ok.
 
-%%
-%% outgoing yate call
-%%
-%% call(From, To, Body) when is_record(From, contact),
-%% 			  is_record(To, contact),
-%% 			  is_binary(Body) ->
-%%     start_link(From, To, Body).
-
-%%
-%% build_invite
-%%
 build_invite(From, To, Body) when is_record(From, contact),
 				  is_record(To, contact),
 				  is_binary(Body) ->
@@ -225,12 +209,6 @@ create_dialog(Request, Contact) ->
     {ok, Dialog} = sipdialog:create_dialog_state_uas(Request, ToTag, Contact),
     ok = sipdialog:register_dialog_controller(Dialog, self()),
     {ok, Dialog}.
-
-%% adopt_transaction(THandler, FromPid, ToPid) ->
-%%     logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
-%%     ok = transactionlayer:change_transaction_parent(THandler, FromPid, ToPid),
-%%     logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
-%%     ok.
 
 send_response(State, Status, Reason) when is_record(State, state),
 					  is_integer(Status),
@@ -729,13 +707,6 @@ handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateNa
 
 
 handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, State) when is_record(Response, response) ->
-%%     case sipheader:dialogid(Response#response.header) of
-%% 	xxxx
-%%     Dialog =
-%% 	case find_dialog(Response, State) of
-%% 	    {early, Dialog2} ->
-%% 		update_dialog_state_uac(Response, Dialog2);
-
     Owner = State#state.owner,
     Early = State#state.early_dialogs,
     Dialog =
