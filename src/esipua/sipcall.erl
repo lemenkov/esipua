@@ -17,6 +17,7 @@
 
 %% api
 -export([
+	 start_link/4,
 	 start_link/3,
 	 stop/1,
 	 build_invite/3,
@@ -179,7 +180,10 @@ receive_invite(Call, Request, OldPid) when is_pid(Call),
 
 
 start_link(Module, Args, Options) when is_atom(Module) ->
-    gen_fsm:start_link(?MODULE, [Module, Args, Options, self()], Options).
+    start_link(Module, Args, Options, self()).
+
+start_link(Module, Args, Options, Owner) when is_atom(Module) ->
+    gen_fsm:start_link(?MODULE, [Module, Args, Options, Owner], Options).
 
 drop(Call) ->
     gen_fsm:send_event(Call, drop).

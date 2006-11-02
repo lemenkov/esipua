@@ -17,6 +17,8 @@
 %% api
 -export([start_link/2, stop/0]).
 
+-export([make/0]).
+
 %% gen_fsm callbacks
 -export([init/1,
 	 code_change/4,
@@ -49,7 +51,7 @@ init() ->
 request(#request{method="INVITE"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
     sipb2bua:start_link(Request, LogStr);
 request(_Request, _Origin, LogStr) ->
-    logger:log(normal, "sipclient: Request ~s", [LogStr]),
+    logger:log(normal, "sipb2bua: Request ~s", [LogStr]),
     ok.
 
 
@@ -62,7 +64,7 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 		{ok, Dc_pid} ->
 		    logger:log(normal, "sipcall: Response to ~s: '~p ~s', no matching transaction, matching dialog ~p - dropping", [LogStr, Status, Reason, Dc_pid]);
 		_ ->
-%% 		    logger:log(normal, "sipclient: Response to ~s: '~p ~s', no matching transaction, no matching dialog - dropping X", [LogStr, Status, Reason]),
+%% 		    logger:log(normal, "sipb2bua: Response to ~s: '~p ~s', no matching transaction, no matching dialog - dropping X", [LogStr, Status, Reason]),
 		    sipcall:response(Response, Origin, LogStr)
 	    end;
 	true ->
@@ -75,7 +77,7 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 %% outgoing yate call
 %%
 start_link(Request, LogStr) ->
-    logger:log(normal, "sipclient: start_link ~p~n", [self()]),
+    logger:log(normal, "sipb2bua: start_link ~p~n", [self()]),
     gen_fsm:start_link(?MODULE, [Request, LogStr, self()], []).
 
 
@@ -92,25 +94,43 @@ init([]) ->
 
 %% Incoming SIP call
 init([Request, LogStr, OldPid]) ->
-    logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
-    {ok, SipCall} = sipcall:start_link(?MODULE, [], []),
+    logger:log(normal, "sipb2bua: INVITE ~s ~p~n", [LogStr, self()]),
+%%     {ok, SipCall} = sipcall:start_link(?MODULE, [], []),
+    Callid = list_to_atom(sipheader:callid(Request#request.header)),
+    IncomingSpec = {Callid,
+		    {sipcall, start_link, [?MODULE, [], [], self()]},
+		    temporary, 2000, worker, [sipcall]},
+    {ok, SipCall} = supervisor:start_child(esipua_sup, IncomingSpec),
+    true = link(SipCall),
     ok = sipcall:receive_invite(SipCall, Request, OldPid),
+%%     {ok, SipCall} = sipcall:receive_invite(Request, OldPid),
 
     Header = Request#request.header,
     Body = Request#request.body,
     Uri = Request#request.uri,
 
+    [Target] = url_param:find(Uri#sipurl.param_pairs, "target"),
+    TargetUri = sipurl:parse(Target),
+
     {FromName, FromUri} = sipheader:from(Header),
     FromContact = contact:new(FromName, FromUri, []),
 
-    {ToName, ToUri} = sipheader:to(Header),
+%%     {_ToName, _ToUri} = sipheader:to(Header),
 %%     ToContact = contact:new(ToName, ToUri, []),
 
-    UriContact = contact:new(Uri),
+%%     UriContact = contact:new(Uri),
+    UriContact = contact:new(TargetUri),
 
     {ok, Outgoing_inv} = sipcall:build_invite(FromContact, UriContact, Body),
     
-    {ok, Outgoing_call} = sipcall:start_link(?MODULE, [], []),
+    OutCallid = list_to_atom(sipheader:callid(Outgoing_inv#request.header)),
+    OutSpec = {OutCallid,
+	       {sipcall, start_link, [?MODULE, [], [], self()]},
+	       temporary, 2000, worker, [sipcall]},
+    {ok, Outgoing_call} = supervisor:start_child(esipua_sup, OutSpec),
+    true = link(Outgoing_call),
+
+%%     {ok, Outgoing_call} = sipcall:start_link(?MODULE, [], []),
     ok = sipcall:send_invite(Outgoing_call, Outgoing_inv),
 
     Contact = "<sip:dummy@192.168.0.2:5080>",
@@ -210,3 +230,20 @@ handle_info(Info, StateName, State) ->
 terminate(Reason, _StateName, _State) ->
     error_logger:error_msg("~p: Terminated ~p~n", [?MODULE, Reason]),
     terminated.
+
+
+make() ->
+    Modules = [
+		"sipb2bua"
+	    ],
+
+    Prefix = "../../../src/sipb2bua/",
+    Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
+
+    make:files(Files,
+	       [load,
+		{i, "../../../include"},
+		{i, "../../../src/esipua"},
+		{i, "/usr/lib/yxa/include"},
+		{outdir, "../../src/sipb2bua"},
+		debug_info]).
