@@ -22,7 +22,6 @@
 %% @end
 %%--------------------------------------------------------------------
 connect(Host, Port) ->
-%%    yate_sup:start_client(Host, Port).
     yate_port_sup:start_client(Host, Port).
 
 %%--------------------------------------------------------------------
@@ -136,28 +135,6 @@ queue_msg(Handle, Name, Keys, Tag) ->
 send_msg(Handle, Name, Keys) ->
     call(Handle, {msg, Name, Keys}).
 
-%% record_wave(Handle, WaveFile) ->
-%%     {ok, _RetValue, _RetCmd} =
-%% 	yate:send_msg(Handle, chan.masquerade,
-%% 		      [{message, "chan.attach"},
-%% 		       {id, dict:fetch(targetid, Cmd#command.keys)},
-%% 		       {notify, StateData#state.id},
-%% 		       {source, ["wave/play/", WaveFile]}
-%% 		       %%{maxlen, 8000},
-%% 		       %%{consumer, "wave/record//tmp/record.mulaw"}
-%% 		      ]),
-%%     ok.
-
-%%--------------------------------------------------------------------
-%% @spec stop(Handle) -> ok
-%%           Handle = pid()
-%% @doc close connection
-%% @end
-%%--------------------------------------------------------------------
-%% stop(Handle) ->
-%%     gen_server:cast(Handle, stop).
-
-
 make() ->
     Modules = [
 		"command",
@@ -186,6 +163,7 @@ make() ->
     make:files(Files,
 	       [load,
 		{i, "../../../include"},
+		{i, "../../src/yate"},
 		{i, "/usr/lib/yxa/include"},
 		{outdir, "../../src/yate"},
 		debug_info]).

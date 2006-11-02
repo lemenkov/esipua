@@ -45,6 +45,4 @@ init(_Args) ->
 		permanent, 10000, worker, [yate_port_srv]},
     CallRegSpec = {yate_call_reg, {yate_call_reg, start_link, []},
 		   permanent, 10000, worker, [yate_call_reg]},
-%%     SupSpec = {yate_sup, {yate_sup, start_link, []},
-%% 	       permanent, infinity, supervisor, [yate_sup]},
     {ok, {{one_for_one, 10, 60}, [PortSpec, CallRegSpec]}}.

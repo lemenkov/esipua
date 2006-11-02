@@ -123,10 +123,6 @@ handle_call(Request, _From, State) ->
 
 handle_cast(stop, State) ->
     {stop, normal, State};
-%% handle_cast({cast, {ans, RetValue, RetCmd}, From}, State) ->
-%%     error_logger:info_msg("Ans in ~p: ~p~n", [?MODULE, RetValue]),
-%%     gen_server:reply(From, {ok, RetValue, RetCmd}),
-%%     {noreply, State};
 handle_cast(Request, State) ->
     error_logger:error_msg("Unsupported cast in ~p: ~p~n", [?MODULE, Request]),
     {noreply, State}.

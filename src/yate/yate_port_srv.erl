@@ -38,7 +38,6 @@ start_link() ->
     error_logger:info_msg("Start ~p~n", [?MODULE]),
     {ok, Pid} = gen_server:start_link({local, ?SERVER}, ?MODULE, [], []),
     ok = wait_running(),
-%%gen_server:call(Pid, wait_running),
     {ok, Pid}.
 
 wait_running() ->
