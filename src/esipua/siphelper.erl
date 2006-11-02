@@ -11,6 +11,9 @@
 
 -export([
 	 start_generate_request/5,
+	 generate_new_request/3,
+	 generate_new_request/4,
+	 generate_new_request/5,
 	 send_ack/2,
 	 send_ack/3,
 	 send_request/1,
@@ -74,6 +77,39 @@ start_generate_request(Method, From, To, ExtraHeaders, Body) ->
     Request = siprequest:set_request_body(Request1, Body),
 
     {ok, Request, CallId, FromTag, CSeq}.
+
+
+%%--------------------------------------------------------------------
+%% Function: generate_new_request(Method, State, Contact)
+%%           Method = string(), SIP method
+%%           State  = state record()
+%% Descrip.: Generate a request template using values from the dialog
+%%           state in State#state.dialog, or from the INVITE request
+%%           created during startup and stored in
+%%           State#state.invite_request (note that the INVITE request
+%%           is always created, even though it is not always sent).
+%% Returns : {ok, Request, NewDialog}
+%%--------------------------------------------------------------------
+
+generate_new_request(Method, Dialog, Contact) ->
+    generate_new_request(Method, Dialog, Contact, []).
+
+generate_new_request(Method, Dialog, Contact, ExtraHeaders) when is_list(ExtraHeaders) ->
+    ExtraHeaders1 = [{"Contact",  [Contact]} | ExtraHeaders],
+    {ok, Request, Dialog1, _Dst} = sipdialog:generate_new_request(Method, ExtraHeaders1, <<>>, Dialog),
+    {ok, Request, Dialog1};
+
+generate_new_request(Method, Dialog, Contact, CSeqNum) when is_integer(CSeqNum)->
+    generate_new_request(Method, Dialog, Contact, CSeqNum, []).
+
+generate_new_request(Method, Dialog, Contact, CSeqNum, ExtraHeaders) ->
+    CSeq = lists:concat([CSeqNum, " ", Method]),
+%%     CSeq = lists:concat([Method, " ", CSeqNum]),
+    ExtraHeaders1 = [{"CSeq", [CSeq]}, {"Contact",  [Contact]} | ExtraHeaders],
+    {ok, Request, Dialog1, _Dst} = sipdialog:generate_new_request(Method, ExtraHeaders1, <<>>, Dialog),
+    {ok, Request, Dialog1}.
+
+
 
 
 send_ack(Request, Auths) ->

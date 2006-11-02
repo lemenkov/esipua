@@ -123,37 +123,6 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 %% 			  is_binary(Body) ->
 %%     start_link(From, To, Body).
 
-%%--------------------------------------------------------------------
-%% Function: generate_new_request(Method, State, Contact)
-%%           Method = string(), SIP method
-%%           State  = state record()
-%% Descrip.: Generate a request template using values from the dialog
-%%           state in State#state.dialog, or from the INVITE request
-%%           created during startup and stored in
-%%           State#state.invite_request (note that the INVITE request
-%%           is always created, even though it is not always sent).
-%% Returns : {ok, Request, NewDialog}
-%%--------------------------------------------------------------------
-
-generate_new_request(Method, Dialog, Contact) ->
-    generate_new_request(Method, Dialog, Contact, []).
-
-generate_new_request(Method, Dialog, Contact, ExtraHeaders) when is_list(ExtraHeaders) ->
-    ExtraHeaders1 = [{"Contact",  [Contact]} | ExtraHeaders],
-    {ok, Request, Dialog1, _Dst} = sipdialog:generate_new_request(Method, ExtraHeaders1, <<>>, Dialog),
-    {ok, Request, Dialog1};
-
-generate_new_request(Method, Dialog, Contact, CSeqNum) when is_integer(CSeqNum)->
-    generate_new_request(Method, Dialog, Contact, CSeqNum, []).
-
-generate_new_request(Method, Dialog, Contact, CSeqNum, ExtraHeaders) ->
-    CSeq = lists:concat([CSeqNum, " ", Method]),
-%%     CSeq = lists:concat([Method, " ", CSeqNum]),
-    ExtraHeaders1 = [{"CSeq", [CSeq]}, {"Contact",  [Contact]} | ExtraHeaders],
-    {ok, Request, Dialog1, _Dst} = sipdialog:generate_new_request(Method, ExtraHeaders1, <<>>, Dialog),
-    {ok, Request, Dialog1}.
-
-
 %%
 %% build_invite
 %%
@@ -361,7 +330,7 @@ do_send_bye(Status, Reason, State) ->
     Dialog = State#state.dialog,
 
     {ok, Bye, Dialog1} =
-	generate_new_request("BYE", Dialog, State#state.contact, ExtraHeaders),
+	siphelper:generate_new_request("BYE", Dialog, State#state.contact, ExtraHeaders),
     {ok, Pid, Branch} = siphelper:send_request(Bye),
 
     State1 = State#state{dialog=Dialog1, bye_pid=Pid, bye_branch=Branch},
@@ -611,7 +580,7 @@ pred_skip_resp(_BranchState, _Status, _Response, State) ->
 
 send_prack(Response, Rseq, State) ->
     {Dialog, State0} = need_dialog(Response, State),
-    {ok, Request, NewDialog} = generate_new_request("PRACK", Dialog, State0#state.contact),
+    {ok, Request, NewDialog} = siphelper:generate_new_request("PRACK", Dialog, State0#state.contact),
 
 %%     throw({send_prack, Dialog, Request}),
 
@@ -746,7 +715,7 @@ handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, St
 
     %% FIXME wait 64T1 and drop early dialogs
     {ok, Ack, Dialog1} =
-	generate_new_request("ACK", Dialog, State#state.contact,
+	siphelper:generate_new_request("ACK", Dialog, State#state.contact,
 			     State#state.invite_cseqno),
 %%     {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(Ack, State#state.auths),
 
