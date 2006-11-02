@@ -226,11 +226,11 @@ create_dialog(Request, Contact) ->
     ok = sipdialog:register_dialog_controller(Dialog, self()),
     {ok, Dialog}.
 
-adopt_transaction(THandler, FromPid, ToPid) ->
-    logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
-    ok = transactionlayer:change_transaction_parent(THandler, FromPid, ToPid),
-    logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
-    ok.
+%% adopt_transaction(THandler, FromPid, ToPid) ->
+%%     logger:log(normal, "sipclient: before change_parent ~p~n", [self()]),
+%%     ok = transactionlayer:change_transaction_parent(THandler, FromPid, ToPid),
+%%     logger:log(normal, "sipclient: after change_parent ~p~n", [self()]),
+%%     ok.
 
 send_response(State, Status, Reason) when is_record(State, state),
 					  is_integer(Status),
@@ -595,16 +595,16 @@ send_prack(Response, Rseq, State) ->
     {ok, State1}.
 
 
-set_dialog_state_uac(Response, State) when is_record(Response, response),
-					   is_record(State, state) ->
-    case State#state.dialog of
-	_ ->
-	    {ok, Dialog1} = create_dialog_state_uac(State#state.invite_req, Response),
-	    Dialog1;
+%% set_dialog_state_uac(Response, State) when is_record(Response, response),
+%% 					   is_record(State, state) ->
+%%     case State#state.dialog of
+%% 	_ ->
+%% 	    {ok, Dialog1} = create_dialog_state_uac(State#state.invite_req, Response),
+%% 	    Dialog1;
 	
-	Dialog1 ->
- 	    update_dialog_state_uac(Response, Dialog1)
-    end.
+%% 	Dialog1 ->
+%%  	    update_dialog_state_uac(Response, Dialog1)
+%%     end.
 
 create_dialog_state_uac(Request, Response) when is_record(Request, request),
 						is_record(Response, response) ->
