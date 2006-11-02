@@ -17,8 +17,10 @@
 
 %% api
 -export([
+	 start/1,
 	 start_link/4,
 	 start_link/3,
+	 start_link/5,
 	 stop/1,
 	 build_invite/3,
 	 send_invite/2,
@@ -178,12 +180,27 @@ receive_invite(Call, Request, OldPid) when is_pid(Call),
 					   is_pid(OldPid) ->
     gen_fsm:send_event(Call, {receive_invite, Request, OldPid}).
 
+start(Request) when is_record(Request, request) ->
+    Callid = list_to_atom(sipheader:callid(Request#request.header)),
+    start(Callid);
+
+start(Callid) when is_list(Callid) ->
+    start(list_to_atom(Callid));
+
+start(Id) when is_atom(Id) ->
+    IncomingSpec = {Id,
+		    {sipcall, start_link, [?MODULE, [], [], self()]},
+		    temporary, 2000, worker, [sipcall]},
+    supervisor:start_child(esipua_sup, IncomingSpec).
 
 start_link(Module, Args, Options) when is_atom(Module) ->
     start_link(Module, Args, Options, self()).
 
 start_link(Module, Args, Options, Owner) when is_atom(Module) ->
     gen_fsm:start_link(?MODULE, [Module, Args, Options, Owner], Options).
+
+start_link(ServerName, Module, Args, Options, Owner) when is_atom(Module) ->
+    gen_fsm:start_link(ServerName, ?MODULE, [Module, Args, Options, Owner], Options).
 
 drop(Call) ->
     gen_fsm:send_event(Call, drop).
@@ -227,16 +244,18 @@ stop(Pid) ->
 %% gen_fsm callbacks
 %%
 init([Module, Args, Options, Owner]) when is_atom(Module) ->
+    process_flag(trap_exit, true),
     logger:log(normal, "~p: ~p~n", [?MODULE, self()]),
-    case Module:init(Args) of
-	{ok, _SubState} ->
+    link(Owner),
+%%     case Module:init(Args) of
+%% 	{ok, _SubState} ->
 	    {ok, start, #state{module=Module, options=Options,
-			       owner=Owner}};
-	{stop, Reason} ->
-	    {stop, Reason};
-	ignore ->
-	    ignore
-    end.
+			       owner=Owner}}.
+%% 	{stop, Reason} ->
+%% 	    {stop, Reason};
+%% 	ignore ->
+%% 	    ignore
+%%     end.
 
 
 create_dialog(Request, Contact) ->
@@ -514,6 +533,11 @@ handle_info({dialog_expired, {CallId, LocalTag, RemoteTag}=DialogId}, StateName,
 %% 		    xxxxxxxxxxxx
 
     {next_state, StateName, State};
+
+handle_info({'EXIT', Owner, Reason}, StateName, #state{owner=Owner}=State) ->
+    error_logger:error_msg("~p: Owner ~p terminated ~p~n",
+			   [?MODULE, Owner, Reason]),
+    {stop, Reason, State};
 
 handle_info(Info, StateName, State) ->
     error_logger:error_msg("~p: Unhandled info in ~p ~p~n",

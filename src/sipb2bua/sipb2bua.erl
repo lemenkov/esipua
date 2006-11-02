@@ -15,7 +15,7 @@
 
 
 %% api
--export([start_link/2, stop/0]).
+-export([]).
 
 -export([make/0]).
 
@@ -25,9 +25,13 @@
 	 handle_event/3,
 	 handle_sync_event/4,
 	 handle_info/3,
-	 terminate/3]).
+	 terminate/3,
+
+	 init/3
+	]).
 
 -record(state, {
+		old_pid,
 		invite,				% INVITE request
 		incoming_call,			% SIP call (Pid)
 		outgoing_call,			% SIP call (Pid)
@@ -49,7 +53,8 @@ init() ->
     [Tables, stateful, {append, []}].
 
 request(#request{method="INVITE"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
-    sipb2bua:start_link(Request, LogStr);
+    {ok, Pid} = start_link(LogStr),
+    ok = receive_invite(Pid, Request);
 request(_Request, _Origin, LogStr) ->
     logger:log(normal, "sipb2bua: Request ~s", [LogStr]),
     ok.
@@ -76,10 +81,17 @@ response(Response, Origin, LogStr) when is_record(Response, response), is_record
 %%
 %% outgoing yate call
 %%
-start_link(Request, LogStr) ->
+start_link(LogStr) ->
     logger:log(normal, "sipb2bua: start_link ~p~n", [self()]),
-    gen_fsm:start_link(?MODULE, [Request, LogStr, self()], []).
+    Spec = {make_ref(),
+	    {gen_fsm, start_link, [?MODULE, [LogStr, self()], []]},
+	    temporary, 2000, worker, [sipb2bua]},
+    supervisor:start_child(sipserver_sup, Spec).
+%%     gen_fsm:start_link(?MODULE, [LogStr, self()], []).
 
+
+receive_invite(Pid, Request) ->
+    gen_fsm:sync_send_event(Pid, {receive_invite, Request}).
 
 stop() ->
     error.
@@ -93,17 +105,16 @@ init([]) ->
     {ok, undefined};
 
 %% Incoming SIP call
-init([Request, LogStr, OldPid]) ->
+init([LogStr, OldPid]) ->
+    process_flag(trap_exit, true),
     logger:log(normal, "sipb2bua: INVITE ~s ~p~n", [LogStr, self()]),
-%%     {ok, SipCall} = sipcall:start_link(?MODULE, [], []),
-    Callid = list_to_atom(sipheader:callid(Request#request.header)),
-    IncomingSpec = {Callid,
-		    {sipcall, start_link, [?MODULE, [], [], self()]},
-		    temporary, 2000, worker, [sipcall]},
-    {ok, SipCall} = supervisor:start_child(esipua_sup, IncomingSpec),
-    true = link(SipCall),
-    ok = sipcall:receive_invite(SipCall, Request, OldPid),
-%%     {ok, SipCall} = sipcall:receive_invite(Request, OldPid),
+    {ok, init, #state{old_pid=OldPid}}.
+
+
+init({receive_invite, Request}, _From, State) ->
+    Callid = sipheader:callid(Request#request.header),
+    {ok, SipCall} = sipcall:start(Callid),
+    ok = sipcall:receive_invite(SipCall, Request, State#state.old_pid),
 
     Header = Request#request.header,
     Body = Request#request.body,
@@ -123,25 +134,19 @@ init([Request, LogStr, OldPid]) ->
 
     {ok, Outgoing_inv} = sipcall:build_invite(FromContact, UriContact, Body),
     
-    OutCallid = list_to_atom(sipheader:callid(Outgoing_inv#request.header)),
-    OutSpec = {OutCallid,
-	       {sipcall, start_link, [?MODULE, [], [], self()]},
-	       temporary, 2000, worker, [sipcall]},
-    {ok, Outgoing_call} = supervisor:start_child(esipua_sup, OutSpec),
-    true = link(Outgoing_call),
-
-%%     {ok, Outgoing_call} = sipcall:start_link(?MODULE, [], []),
+    OutCallid = sipheader:callid(Outgoing_inv#request.header),
+    {ok, Outgoing_call} = sipcall:start(OutCallid),
     ok = sipcall:send_invite(Outgoing_call, Outgoing_inv),
 
     Contact = "<sip:dummy@192.168.0.2:5080>",
 
-    State = #state{invite=Request,
+    State1 = State#state{invite=Request,
 		   outgoing_call=Outgoing_call,
 		   outgoing_inv=Outgoing_inv,
 		   incoming_call=SipCall,
 		   contact=Contact
 		  },
-    {ok, start, State}.
+    {reply, ok, start, State1}.
 
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
@@ -213,13 +218,18 @@ handle_info({call_answered, SipCall, Response}, start=_StateName, #state{outgoin
     ok = sipcall:answer(Call, Body),
     {next_state, up, State};
 
-handle_info({'EXIT', _Pid, normal}, StateName, State) ->
-    %% Ignore normal exit
-    {next_state, StateName, State};
+%% handle_info({'EXIT', Pid, normal=Reason}, StateName, State) ->
+%%     %% Ignore normal exit
+%%     error_logger:info_msg("~p: ~p terminated ~p~n",
+%% 			  [?MODULE, Pid, Reason]),
+%%     {next_state, StateName, State};
 
-handle_info({'EXIT', _Pid, Reason}, _StateName, State) ->
-    %% Terminate with error
-    {stop, Reason, State};
+%% handle_info({'EXIT', Pid, Reason}, _StateName, State) ->
+%%     %% Terminate with error
+%%     error_logger:info_msg("~p: ~p terminated ~p~n",
+%% 			  [?MODULE, Pid, Reason]),
+%%     {next_state, StateName, State};
+%% %%     {stop, Reason, State};
 
 handle_info(Info, StateName, State) ->
     error_logger:error_msg("~p: Unhandled info in info=~p state_name=~p~n",
