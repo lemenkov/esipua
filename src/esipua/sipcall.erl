@@ -185,11 +185,12 @@ start(Request) when is_record(Request, request) ->
     start(Callid);
 
 start(Callid) when is_list(Callid) ->
-    start(list_to_atom(Callid));
+    start(list_to_atom(fix_callid(Callid)));
 
 start(Id) when is_atom(Id) ->
     IncomingSpec = {Id,
-		    {sipcall, start_link, [?MODULE, [], [], self()]},
+		    {sipcall, start_link,
+		     [{local, Id}, ?MODULE, [], [], self()]},
 		    temporary, 2000, worker, [sipcall]},
     supervisor:start_child(esipua_sup, IncomingSpec).
 
@@ -361,6 +362,10 @@ up(drop, State) ->
     up({drop,  200, "Normal Clearing"}, State);
 up({drop, Status, Reason}, State) when is_integer(Status),
 				       is_list(Reason) ->
+    {ok, State1} = do_send_bye(Status, Reason, State),
+    {next_state, bye_sent, State1}.
+
+do_send_bye(Status, Reason, State) ->
     ExtraHeaders = [{"Reason", [lists:concat(["SIP ;cause=", Status, " ;text=\"", Reason, "\""])]}],
     Dialog = State#state.dialog,
 
@@ -369,7 +374,7 @@ up({drop, Status, Reason}, State) when is_integer(Status),
     {ok, Pid, Branch} = siphelper:send_request(Bye),
 
     State1 = State#state{dialog=Dialog1, bye_pid=Pid, bye_branch=Branch},
-    {next_state, bye_sent, State1}.
+    {ok, State1}.
 
 
 
@@ -415,9 +420,13 @@ handle_info({servertransaction_cancelled, Pid, ExtraHeaders}, incoming=_StateNam
     Owner ! {call_drop, self(), ExtraHeaders},
     
     {stop, normal, State};
-handle_info({servertransaction_terminating, Pid}, incoming=StateName, #state{invite_pid=Pid}=State) ->
+handle_info({servertransaction_terminating, InvitePid}, StateName, #state{invite_pid=InvitePid}=State) ->
     %% Ignore
-    logger:log(normal, "servertransaction_terminating ~n", []),
+%%     logger:log(normal, "servertransaction_terminating ~p ~p~n", [InvitePid, StateName]),
+    {next_state, StateName, State};
+handle_info({clienttransaction_terminating, InvitePid, _Branch}, StateName, #state{invite_pid=InvitePid}=State) ->
+    %% Ignore
+%%     logger:log(normal, "clienttransaction_terminating ~p ~p~n", [InvitePid, StateName]),
     {next_state, StateName, State};
 handle_info(timeout, incoming=StateName, State) ->
     %% TODO Handle INVITE timeout
@@ -537,7 +546,16 @@ handle_info({dialog_expired, {CallId, LocalTag, RemoteTag}=DialogId}, StateName,
 handle_info({'EXIT', Owner, Reason}, StateName, #state{owner=Owner}=State) ->
     error_logger:error_msg("~p: Owner ~p terminated ~p~n",
 			   [?MODULE, Owner, Reason]),
-    {stop, Reason, State};
+    {ok, State1} = shutdown(StateName, State),
+    {stop, Reason, State1};
+
+handle_info({'EXIT', _Pid, normal}, StateName, State) ->
+    %% ignore
+    {next_state, StateName, State};
+
+handle_info({'EXIT', _Pid, Reason}, StateName, State) ->
+    {ok, State1} = shutdown(StateName, State),
+    {stop, Reason, State1};
 
 handle_info(Info, StateName, State) ->
     error_logger:error_msg("~p: Unhandled info in ~p ~p~n",
@@ -549,6 +567,22 @@ terminate(Reason, _StateName, _State) ->
     error_logger:error_msg("~p: Terminated ~p~n", [?MODULE, Reason]),
     terminated.
 
+%%
+%% Internal
+%%
+
+shutdown(start, State) ->
+    {ok, State};
+shutdown(incoming, State) ->
+    ok = send_response(State, 500, "Server Internal Error"),
+    {ok, State};
+shutdown(outgoing, State) ->
+    %% TODO Wait for 200ok and send ack and bye
+    {ok, State};
+shutdown(up, State) ->
+    %% TODO Wait for 200ok to BYE
+    {ok, State1} = do_send_bye(500, "Server Internal Error", State),
+    {ok, State1}.
 
 pred_skip_resp(BranchState, Status, Response, State) when BranchState == proceeding, Status >= 101, Status =< 199 ->
 %	    Request = Status#state.invite,
@@ -854,3 +888,20 @@ compare_dialog({CallId, LocalTag, RemoteTag}, D2) when is_list(CallId),
     CallId == D2#dialog.callid andalso
 	LocalTag == D2#dialog.local_tag andalso
 	RemoteTag == D2#dialog.remote_tag.
+
+
+fix_callid(Callid) when is_list(Callid) ->
+    Fun = fun(E) ->
+		  if
+		      E == $@ ->
+			  $_;
+		      E == $. ->
+			  $_;
+		      E == $- ->
+			  $_;
+		      true ->
+			  E
+		  end
+	  end,
+
+    lists:map(Fun, Callid).
