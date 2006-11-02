@@ -142,7 +142,7 @@ build_invite(From, To, Body) when is_record(From, contact),
     {ok, Request}.
 
 send_invite(Pid, Request) when is_pid(Pid), is_record(Request, request) ->
-    gen_fsm:send_all_state_event(Pid, {send_invite, Request}).
+    gen_fsm:send_event(Pid, {send_invite, Request}).
 
 receive_invite(Call, Request, OldPid) when is_pid(Call),
 					   is_record(Request, request),
@@ -280,6 +280,22 @@ start({receive_invite, Request, OldPid}, State) ->
 	    State0 = State#state{invite_req=Request, invite_pid=Pid,
 				contact=Contact_str, dialog=Dialog},
 	    {next_state, incoming, State0}
+    end;
+
+%% Send initial INVITE
+start({send_invite, Request}, State) ->
+    [Contact] = keylist:fetch('contact', Request#request.header),
+    CallId = sipheader:callid(Request#request.header),
+    ok = callregister:register_call(CallId, self()),
+    State0 = State#state{invite_req=Request, contact=Contact},
+    case do_send_invite(Request, State0) of
+	{ok, State1} ->
+	    {next_state, outgoing, State1};
+	{siperror, _Status1, _Reason1} ->
+	    {stop, normal, State};
+	R ->
+	    logger:log(normal, "send_request failed: ~p", [R]),
+	    {stop, normal, State}
     end.
 
 
@@ -357,22 +373,6 @@ handle_sync_event(Event, _From, StateName, State) ->
 
 handle_event(stop, _StateName, State) ->
     {stop, normal, State};
-
-%% Send initial INVITE
-handle_event({send_invite, Request}, start, State) ->
-    [Contact] = keylist:fetch('contact', Request#request.header),
-    CallId = sipheader:callid(Request#request.header),
-    ok = callregister:register_call(CallId, self()),
-    State0 = State#state{invite_req=Request, contact=Contact},
-    case do_send_invite(Request, State0) of
-	{ok, State1} ->
-	    {next_state, outgoing, State1};
-	{siperror, _Status1, _Reason1} ->
-	    {stop, normal, State};
-	R ->
-	    logger:log(normal, "send_request failed: ~p", [R]),
-	    {stop, normal, State}
-    end;
 
 handle_event(Request, StateName, State) ->
     error_logger:error_msg("Unhandled cast in ~p: ~p~n", [?MODULE, Request]),
