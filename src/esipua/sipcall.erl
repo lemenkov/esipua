@@ -283,13 +283,13 @@ start({receive_invite, Request, OldPid}, State) ->
     end.
 
 
+%% Cancel outgoing call
 outgoing(drop, State) ->
     Invite_pid = State#state.invite_pid,
     ExtraHeaders = [],
     Invite_pid ! {cancel, "hangup", ExtraHeaders},
 
     {stop, normal, State};
-
 outgoing({drop, Status, Reason}, State) ->
     Invite_pid = State#state.invite_pid,
     ExtraHeaders = [{"Reason", [lists:concat(["SIP ;cause=", Status, " ;text=\"", Reason, "\""])]}],
@@ -297,6 +297,7 @@ outgoing({drop, Status, Reason}, State) ->
     {stop, normal, State}.
 
 
+%% Drop incoming call
 incoming(drop, State) ->
     outgoing({drop, 403, "Forbidden"}, State);
 incoming({drop, Status, Reason}, State) when is_integer(Status),
@@ -305,6 +306,8 @@ incoming({drop, Status, Reason}, State) when is_integer(Status),
 						   is_list(Reason) ->
     ok = send_response(State, Status, Reason),
     {next_state, incoming, State};
+
+%% Indicate proceeding to incoming call
 incoming({proceeding, Status, Reason, Body}, State) when is_integer(Status),
 						   Status >= 101,
 						   Status =< 199,
@@ -312,12 +315,15 @@ incoming({proceeding, Status, Reason, Body}, State) when is_integer(Status),
 						   is_binary(Body) ->
     ok = send_response(State, Status, Reason, [], Body),
     {next_state, incoming, State};
+
+%% Answer incoming call
 incoming({answer, ExtraHeaders, Body}, State) when is_list(ExtraHeaders),
 						   is_binary(Body) ->
     ok = send_response(State, 200, "Ok", ExtraHeaders, Body),
     {next_state, up, State}.
 
 
+%% Drop connected call
 up(drop, State) ->
     up({drop,  200, "Normal Clearing"}, State);
 up({drop, Status, Reason}, State) when is_integer(Status),
@@ -325,6 +331,8 @@ up({drop, Status, Reason}, State) when is_integer(Status),
     {ok, State1} = do_send_bye(Status, Reason, State),
     {next_state, bye_sent, State1}.
 
+
+%% Generate and send BYE
 do_send_bye(Status, Reason, State) ->
     ExtraHeaders = [{"Reason", [lists:concat(["SIP ;cause=", Status, " ;text=\"", Reason, "\""])]}],
     Dialog = State#state.dialog,
@@ -349,6 +357,8 @@ handle_sync_event(Event, _From, StateName, State) ->
 
 handle_event(stop, _StateName, State) ->
     {stop, normal, State};
+
+%% Send initial INVITE
 handle_event({send_invite, Request}, start, State) ->
     [Contact] = keylist:fetch('contact', Request#request.header),
     CallId = sipheader:callid(Request#request.header),
@@ -370,7 +380,7 @@ handle_event(Request, StateName, State) ->
 
 
 
-
+%% Server transaction cancelled by UAC
 handle_info({servertransaction_cancelled, Pid, ExtraHeaders}, incoming=_StateName, #state{invite_pid=Pid}=State) ->
     %% TODO Send hangup
     logger:log(normal, "servertransaction_cancelled ~p~n", [ExtraHeaders]),
@@ -380,18 +390,24 @@ handle_info({servertransaction_cancelled, Pid, ExtraHeaders}, incoming=_StateNam
     Owner ! {call_drop, self(), ExtraHeaders},
     
     {stop, normal, State};
+
+%% Ignore server transaction termination
 handle_info({servertransaction_terminating, InvitePid}, StateName, #state{invite_pid=InvitePid}=State) ->
     %% Ignore
 %%     logger:log(normal, "servertransaction_terminating ~p ~p~n", [InvitePid, StateName]),
     {next_state, StateName, State};
+
+%% Ignore client transaction termination
 handle_info({clienttransaction_terminating, InvitePid, _Branch}, StateName, #state{invite_pid=InvitePid}=State) ->
-    %% Ignore
 %%     logger:log(normal, "clienttransaction_terminating ~p ~p~n", [InvitePid, StateName]),
     {next_state, StateName, State};
 handle_info(timeout, incoming=StateName, State) ->
     %% TODO Handle INVITE timeout
     ok = send_response(State, 408, "Request Timeout"),
     {next_state, StateName, State};
+
+%% BYE response
+%% TODO handle BYE response from SIP core?
 handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, bye_sent=StateName, #state{bye_pid = Pid, bye_branch = Branch} = State) ->
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
     if
@@ -406,6 +422,8 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 		       [BranchState, Status, Response#response.reason]),
             {next_state, StateName, State}
     end;
+
+%% INVITE response from UAS
 handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, outgoing=StateName, #state{invite_pid = Pid, invite_branch = Branch} = State) ->
     {Skip, State1} = pred_skip_resp(BranchState, Status, Response, State),
     case Skip of
@@ -415,6 +433,7 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 	    {next_state, StateName, State1}
     end;
 
+%% INVITE response from SIP core
 handle_info({branch_result, Pid, Branch, BranchState, {_Status, _Reason}=Response}, outgoing=StateName, #state{invite_pid = Pid, invite_branch = Branch} = State) ->
     handle_invite_result(Pid, Branch, BranchState, Response, StateName, State);
 handle_info({new_response, Response, Origin, _LogStr}, StateName, State) when is_record(Origin, siporigin) ->
@@ -428,9 +447,11 @@ handle_info({new_response, Response, Origin, _LogStr}, StateName, State) when is
     end,
     {next_state, StateName, State};
 
+%% 2xx response from other fork
 handle_info({new_2xx_response, Response, Origin, LogStr}, StateName, State) when is_record(Origin, siporigin) ->
     handle_new_2xx_response(Response, Origin, LogStr, StateName, State);
 
+%% New in-dialog ACK
 handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, StateName, State) ->
     %% Don't answer ACK
     %% TODO update dialog timeout?
@@ -439,6 +460,7 @@ handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _O
 %%     logger:log(normal, "Dialog received ACK"),
     {next_state, StateName, State};
 
+%% New in-dialog request
 handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, StateName, State) ->
     THandler = transactionlayer:get_handler_for_request(NewRequest),
     FromPid ! {ok, self(), Ref},
@@ -486,6 +508,7 @@ handle_info({retry_invite, Request}, StateName, State) ->
     end;
 
 handle_info({dialog_expired, {CallId, LocalTag, RemoteTag}=DialogId}, StateName, State) ->
+    %% TODO compare with existing early or confirmed dialogs
     error_logger:info_msg("~p: Refresh dialog ~p~n", [?MODULE, DialogId]),
     sipdialog:set_dialog_expires(CallId, LocalTag, RemoteTag, 30),
 
@@ -531,6 +554,7 @@ terminate(Reason, _StateName, _State) ->
 %% Internal
 %%
 
+%% Terminate ongoing session
 shutdown(start, State) ->
     {ok, State};
 shutdown(incoming, State) ->
@@ -547,6 +571,10 @@ shutdown(bye_sent, State) ->
     %% TODO Wait for 200ok to BYE
     {ok, State}.
 
+
+%% If reliable response, skip if already received, otherwise update state
+%% and send PRACK
+%% If unreliable, never skip
 pred_skip_resp(BranchState, Status, Response, State) when BranchState == proceeding, Status >= 101, Status =< 199 ->
 %	    Request = Status#state.invite,
     case sipheader:is_required("100rel", Response#response.header) of
@@ -578,6 +606,7 @@ pred_skip_resp(_BranchState, _Status, _Response, State) ->
     {false, State}.
 
 
+%% Send PRACK for received response
 send_prack(Response, Rseq, State) ->
     {Dialog, State0} = need_dialog(Response, State),
     {ok, Request, NewDialog} = siphelper:generate_new_request("PRACK", Dialog, State0#state.contact),
@@ -606,6 +635,7 @@ send_prack(Response, Rseq, State) ->
 %%  	    update_dialog_state_uac(Response, Dialog1)
 %%     end.
 
+%% Create and register dialog as UAC
 create_dialog_state_uac(Request, Response) when is_record(Request, request),
 						is_record(Response, response) ->
     error_logger:info_msg("~p: create_dialog_state_uac1 ~n", [?MODULE]),
@@ -614,6 +644,7 @@ create_dialog_state_uac(Request, Response) when is_record(Request, request),
     error_logger:info_msg("~p: create_dialog_state_uac2 ~n", [?MODULE]),
     Dialog.
 
+%% Update dialog record route from 2xx
 update_dialog_state_uac(Response, Dialog) when is_record(Response, response),
 						is_record(Dialog, dialog) ->
     %% Update route set of existing dialog
@@ -623,6 +654,7 @@ update_dialog_state_uac(Response, Dialog) when is_record(Response, response),
     refresh_dialog_target_uac(Response, Dialog1).
 
 
+%% Refresh dialog target for target refresh requests
 refresh_dialog_target_uac(Response, Dialog) when is_record(Response, response),
 						is_record(Dialog, dialog) ->
     %% Update route set of existing dialog
@@ -637,6 +669,9 @@ refresh_dialog_target_uac(Response, Dialog) when is_record(Response, response),
     Dialog#dialog{remote_target=RemoteTarget}.
 
 
+%%
+%% Handle INVITE responses from UAS or SIP core.
+%%
 handle_invite_result(Pid, Branch, BranchState, {Status, Reason}=_Response, StateName, State) ->
     handle_invite_result(Pid, Branch, BranchState, #response{status=Status, reason=Reason}, Status, Reason, StateName, State);
 
@@ -725,6 +760,8 @@ handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, St
 			 ack_req=Ack},
     {next_state, up, State1}.
 
+
+%% Handle aditional 2xx responses received from other UAS:s than first
 %% ACK dialog and terminate
 %% Should be done in a process on its own.
 handle_new_2xx_response(#response{status=Status}=Response, _Origin, _LogStr, up=StateName, State) ->
@@ -750,6 +787,7 @@ handle_new_2xx_response(#response{status=Status}=Response, _Origin, _LogStr, up=
     {next_state, StateName, State1}.
 
 
+%% Send first INVITE or retry if 401/407 was received
 do_send_invite(Request, State) ->
     [Contact] = keylist:fetch('contact', Request#request.header),
 
@@ -776,6 +814,7 @@ do_send_invite(Request, State) ->
     end.
 
 
+%% Create a dialog if not already done
 need_dialog(Response, State) when is_record(Response, response) ->
     Early = State#state.early_dialogs,
     case find_dialog(Response, Early) of
@@ -792,6 +831,7 @@ need_dialog(Response, State) when is_record(Response, response) ->
     end.
 
 
+%% Update matching dialog in list
 update_dialogs(Dialog, Dialogs) when is_record(Dialog, dialog),
 				     is_list(Dialogs) ->
     Update = fun(D) when is_record(D, dialog) ->
@@ -806,6 +846,7 @@ update_dialogs(Dialog, Dialogs) when is_record(Dialog, dialog),
     lists:map(Update, Dialogs).
 
 
+%% Remove matching dialog from list
 drop_dialog(Dialog, Dialogs) when is_record(Dialog, dialog),
 				  is_list(Dialogs) ->
     lists:filter(fun (D) ->
@@ -813,6 +854,7 @@ drop_dialog(Dialog, Dialogs) when is_record(Dialog, dialog),
 		 end, Dialogs).
 
 
+%% Find for response or dialog id
 find_dialog(_DialogId, []) ->
     error;
 
@@ -834,10 +876,14 @@ find_dialog({CallId, LocalTag, RemoteTag}=DialogId, [Dialog|R]) when is_list(Cal
 	    find_dialog(DialogId, R)
     end.
 
+
+%% Add dialog to list
 add_dialog(Dialog, Dialogs) when is_record(Dialog, dialog),
 				 is_list(Dialogs) ->
     [Dialog | Dialogs].
 
+
+%% Compare dialog id:s
 compare_dialog(D1, D2) when is_record(D1, dialog),
 			    is_record(D2, dialog) ->
     D1#dialog.callid == D2#dialog.callid andalso
@@ -851,7 +897,6 @@ compare_dialog({CallId, LocalTag, RemoteTag}, D2) when is_list(CallId),
     CallId == D2#dialog.callid andalso
 	LocalTag == D2#dialog.local_tag andalso
 	RemoteTag == D2#dialog.remote_tag.
-
 
 fix_callid(Callid) when is_list(Callid) ->
     Fun = fun(E) ->
