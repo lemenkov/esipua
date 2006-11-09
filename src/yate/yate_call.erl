@@ -11,7 +11,11 @@
 	 start_link/3,
 	 execute/2,
 	 answer/1, drop/2, drop/1,
-	 play_wave/3, play_tone/2, start_rtp/2, start_rtp/3,
+	 play_wave/3,
+	 play_tone/2,
+	 record_wave/4,
+	 start_rtp/2,
+	 start_rtp/3,
 	 ringing/1, progress/1, send_dtmf/2, stop/1]).
 
 %% gen_server callbacks
@@ -64,6 +68,9 @@ play_wave(Call, Notify, WaveFile) ->
 play_tone(Call, Tone) ->
     error_logger:info_msg("play_tone ~p ~p ~p~n", [?MODULE, self(), Tone]),
     gen_server:call(Call, {play_tone, Tone}).
+
+record_wave(Call, Notify, WaveFile, MaxLen) ->
+    gen_server:call(Call, {record_wave, Notify, WaveFile, MaxLen, self()}).
 
 start_rtp(Call, Remote_address, Remote_port) ->
     error_logger:info_msg("~p: start_rtp~n", [?MODULE]),
@@ -212,16 +219,41 @@ handle_call({play_tone, Tone}, _From, State) ->
 		       {source, "tone/" ++ Tone}]),
     {reply, ok, State};
 
-%% handle_call({record_wave, Handle, TargetId, Notify, WaveFile, MaxLen) ->
-%%     {ok, _RetValue, _RetCmd} =
+handle_call({record_wave, Notify, WaveFile, MaxLen, Pid}, _From, State) ->
+    Id = State#state.id,
+    Handle = State#state.handle,
+    {ok, NotifyPid} = yate_notify:start_link(State#state.client, Notify, Pid, 2000),
+    {ok, NotifyId} = yate_notify:get_id(NotifyPid),
+
+    ExtraParams =
+	if
+	    MaxLen /= undefined ->
+		[{maxlen, MaxLen}];
+	    true ->
+		[]
+	end,
+
+    {ok, _RetValue, _RetCmd} =
+	yate:send_msg(Handle, chan.masquerade,
+		      [{message, "chan.attach"},
+		       {id, Id},
+		       {notify, NotifyId},
+		       {consumer, ["wave/record/", WaveFile]}
+		      ] ++ ExtraParams),
+
+%%     PeerId = State#state.peerid,
+%%     {ok, _RetValue1, _RetCmd1} =
 %% 	yate:send_msg(Handle, chan.masquerade,
-%% 		      [{message, "chan.attach"},
-%% 		       {id, TargetId},
-%% 		       {notify, Notify},
-%% 		       {maxlen, MaxLen},
-%% 		       {consumer, ["wave/record/", WaveFile]}
-%% 		      ]),
-%%     ok.
+%% 		      [{message, "call.execute"},
+%%  		       {id, PeerId},
+%% %% 		       {lonely, true},
+%% %% 		       {voice, false},
+%% %% 		       {echo, false},
+%% %% 		       {smart, true},
+%% %% 		       {callto, "sip/sip:600@mulder"}
+%% 		       {callto, "tone/ring"}
+%% 		      ] ++ ExtraParams),
+    {reply, ok, State};
 
 handle_call({start_rtp, Remote_address, Remote_port}, _From, State) ->
     Id = State#state.id,
