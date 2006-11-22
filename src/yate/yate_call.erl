@@ -167,6 +167,7 @@ handle_call({execute, Keys}, _From, State) ->
 %% 	    Parent ! {yate_call, notfound, self()},
 %% 	    {stop, normal, State};
 	    %% TODO change to error state?
+	    gen_server:cast(self(), stop),
 	    {reply, {error, {noroute, RetCmd}}, State};
 	true ->
 	    {ok, Auto} = fetch_auto_keys(RetCmd),
@@ -394,7 +395,7 @@ handle_info({yate, Dir, Cmd, From}, State) ->
     error_logger:error_msg("~p:received cmd ~p~n", [?MODULE, self()]),
     handle_command(Cmd#command.type, Dir, Cmd, From, State);
 handle_info({'EXIT', Pid, Reason}, State=#state{parent=Pid}) ->
-    error_logger:error_msg("Do drop ~p ~p~n", [?MODULE, Reason]),
+    error_logger:error_msg("~p:~p ~p terminated, do drop ~p~n", [?MODULE, self(), Pid, Reason]),
     {ok, State1} = handle_drop("Error", State),
     {noreply, State1};
 handle_info({'EXIT', _Pid, normal}, State) ->
