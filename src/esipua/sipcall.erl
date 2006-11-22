@@ -4,6 +4,7 @@
 
 %%
 %% States:
+%% start    - initial state
 %% incoming - Incoming calls 
 %% outgoing - Outgoing calls
 %% up       - Call up
@@ -18,6 +19,7 @@
 %% api
 -export([
 	 start/1,
+	 start_link/0,
 	 start_link/1,
 	 start_link/2,
 	 start_link/3,
@@ -146,6 +148,9 @@ start(Id) when is_atom(Id) ->
 		     [{local, Id}, [], self()]},
 		    temporary, 2000, worker, [sipcall]},
     supervisor:start_child(esipua_sup, IncomingSpec).
+
+start_link() ->
+    start_link([]).
 
 start_link(Options) ->
     start_link(Options, self()).
@@ -360,7 +365,6 @@ handle_event(Request, StateName, State) ->
 
 %% Server transaction cancelled by UAC
 handle_info({servertransaction_cancelled, Pid, ExtraHeaders}, incoming=_StateName, #state{invite_pid=Pid}=State) ->
-    %% TODO Send hangup
     logger:log(normal, "servertransaction_cancelled ~p~n", [ExtraHeaders]),
     ok = send_response(State, 487, "Request Terminated"),
 
@@ -414,7 +418,10 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 %% INVITE response from SIP core
 handle_info({branch_result, Pid, Branch, BranchState, {_Status, _Reason}=Response}, outgoing=StateName, #state{invite_pid = Pid, invite_branch = Branch} = State) ->
     handle_invite_result(Pid, Branch, BranchState, Response, StateName, State);
-handle_info({new_response, Response, Origin, _LogStr}, StateName, State) when is_record(Origin, siporigin) ->
+handle_info({new_response, Response, YxaCtx}, StateName, State) when is_record(YxaCtx, yxa_ctx) ->
+%%     Origin = YxaCtx#yxa_ctx.origin,
+%%     LogStr = YxaCtx#yxa_ctx.logstr,
+
     case siphelper:cseq(Response#response.header) of
 	{CSeqNo, "INVITE"} when CSeqNo == State#state.invite_cseqno,
 			        State#state.ack_req /= undefined ->
@@ -426,11 +433,14 @@ handle_info({new_response, Response, Origin, _LogStr}, StateName, State) when is
     {next_state, StateName, State};
 
 %% 2xx response from other fork
-handle_info({new_2xx_response, Response, Origin, LogStr}, StateName, State) when is_record(Origin, siporigin) ->
+handle_info({new_2xx_response, Response, YxaCtx}, StateName, State) when is_record(YxaCtx, yxa_ctx) ->
+    Origin = YxaCtx#yxa_ctx.origin,
+    LogStr = YxaCtx#yxa_ctx.logstr,
+
     handle_new_2xx_response(Response, Origin, LogStr, StateName, State);
 
 %% New in-dialog ACK
-handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _Origin, _LogStrInfo}, StateName, State) ->
+handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _YxaCtx}, StateName, State) ->
     %% Don't answer ACK
     %% TODO update dialog timeout?
     %% FIXME stop retransmission of 200 Ok
@@ -439,7 +449,7 @@ handle_info({new_request, FromPid, Ref, #request{method="ACK"} = _NewRequest, _O
     {next_state, StateName, State};
 
 %% New in-dialog request
-handle_info({new_request, FromPid, Ref, NewRequest, _Origin, _LogStrInfo}, StateName, State) ->
+handle_info({new_request, FromPid, Ref, NewRequest, _YxaCtx}, StateName, State) ->
     THandler = transactionlayer:get_handler_for_request(NewRequest),
     FromPid ! {ok, self(), Ref},
     {Action, NewDialog} = 
@@ -660,7 +670,6 @@ handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateNa
     logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
     Owner = State#state.owner,
     if
-	%% TODO Handle all 101 <= Status <= 199
 	Status >= 101, Status =< 199 ->
 	    {_Dialog, State1} = need_dialog(Response, State),
 
@@ -675,6 +684,7 @@ handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateNa
             {stop, normal, State};
 
 	State#state.invite_cseqno == 1, Status == 401 orelse Status == 407 ->
+	    %% FIXME store auth in config file
 	    Lookup = fun(Realm, From, To) ->
 			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),
  			     {ok, "2001", "test"}
@@ -761,8 +771,6 @@ handle_new_2xx_response(#response{status=Status}=Response, _Origin, _LogStr, up=
 %% Send first INVITE or retry if 401/407 was received
 do_send_invite(Request, State) ->
     [Contact] = keylist:fetch('contact', Request#request.header),
-
-    %% TODO set cseqno
 
     Header = Request#request.header,
     CSeq = State#state.invite_cseqno + 1,

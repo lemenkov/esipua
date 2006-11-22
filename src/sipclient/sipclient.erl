@@ -44,7 +44,7 @@
 
 
 %% yxa_app callbacks
--export([init/0, request/3, response/3]).
+-export([init/0, request/2, response/2]).
 
 -include("siprecords.hrl").
 -include("sipsocket.hrl").
@@ -61,18 +61,25 @@ init() ->
     Tables = [],
     [Tables, stateful, {append, [Server]}].
 
-request(#request{method="OPTIONS"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
+request(#request{method="OPTIONS"}=Request, YxaCtx) when is_record(YxaCtx, yxa_ctx) ->
+%%     Origin = YxaCtx#yxa_ctx.origin,
+    LogStr = YxaCtx#yxa_ctx.logstr,
+
     logger:log(normal, "sipclient: Options ~s", [LogStr]),
     siphelper:send_response(Request, 200, "Ok");
-request(#request{method="INVITE"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
+request(#request{method="INVITE"}=Request, YxaCtx) when is_record(YxaCtx, yxa_ctx) ->
+%%     Origin = YxaCtx#yxa_ctx.origin,
+    LogStr = YxaCtx#yxa_ctx.logstr,
     ysip_srv:invite(Request, LogStr);
-request(_Request, _Origin, LogStr) ->
+request(_Request, YxaCtx) when is_record(YxaCtx, yxa_ctx) ->
+    LogStr = YxaCtx#yxa_ctx.logstr,
     logger:log(normal, "sipclient: Request ~s", [LogStr]),
     ok.
 
 
-response(Response, Origin, LogStr) when is_record(Response, response), is_record
-(Origin, siporigin) ->        
+response(Response, YxaCtx) when is_record(Response, response), is_record(YxaCtx, yxa_ctx) ->
+    Origin = YxaCtx#yxa_ctx.origin,
+    LogStr = YxaCtx#yxa_ctx.logstr,
     {Status, Reason} = {Response#response.status, Response#response.reason},
     if
 	Status >= 200, Status =< 299 ->
@@ -173,7 +180,7 @@ init2(Client, Request, LogStr, OldPid) ->
     logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
     {ok, Address, Port} = parse_sdp(Request),
 
-    {ok, SipCall} = sipcall:start_link(?MODULE, [], []),
+    {ok, SipCall} = sipcall:start_link(),
     ok = sipcall:receive_invite(SipCall, Request, OldPid),
 
     %% TODO handle incoming call, build sipcall Pid
@@ -340,7 +347,7 @@ handle_info({yate_call, execute, Call}, outgoing=StateName, State=#state{call=Ca
     Body = State1#state.sdp_body,
 
     Request1 = siprequest:set_request_body(Request, Body),
-    {ok, Sip_call} = sipcall:start_link(?MODULE, [], []),
+    {ok, Sip_call} = sipcall:start_link(),
     ok = sipcall:send_invite(Sip_call, Request1),
 
     State2 = State1#state{sip_call=Sip_call,

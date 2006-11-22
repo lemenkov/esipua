@@ -43,7 +43,7 @@
 
 
 %% yxa_app callbacks
--export([init/0, request/3, response/3]).
+-export([init/0, request/2,  response/2]).
 
 -include("siprecords.hrl").
 -include("sipsocket.hrl").
@@ -52,16 +52,22 @@ init() ->
     Tables = [],
     [Tables, stateful, {append, []}].
 
-request(#request{method="INVITE"}=Request, Origin, LogStr) when is_record(Origin, siporigin) ->
+request(#request{method="INVITE"}=Request, YxaCtx) when is_record(YxaCtx, yxa_ctx) ->
+%%     Origin = YxaCtx#yxa_ctx.origin,
+    LogStr = YxaCtx#yxa_ctx.logstr,
+
     {ok, Pid} = start_link(LogStr),
     ok = receive_invite(Pid, Request);
-request(_Request, _Origin, LogStr) ->
+request(_Request, YxaCtx) when is_record(YxaCtx, yxa_ctx) ->
+    LogStr = YxaCtx#yxa_ctx.logstr,
     logger:log(normal, "sipb2bua: Request ~s", [LogStr]),
     ok.
 
 
-response(Response, Origin, LogStr) when is_record(Response, response), is_record
-(Origin, siporigin) ->        
+response(Response, YxaCtx) when is_record(Response, response), is_record(YxaCtx, yxa_ctx) ->
+    Origin = YxaCtx#yxa_ctx.origin,
+    LogStr = YxaCtx#yxa_ctx.logstr,
+
     {Status, Reason} = {Response#response.status, Response#response.reason},
     if
 	Status >= 200, Status =< 299 ->
