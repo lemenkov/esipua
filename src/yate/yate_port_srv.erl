@@ -25,7 +25,7 @@
 -record(sstate, {pid, port, state=startup, waiting=[]}).
 
 -define(SERVER, ?MODULE).
--define(TIMEOUT_5S, 5000).
+-define(TIMEOUT_START, 30000).
 
 
 %%--------------------------------------------------------------------
@@ -66,7 +66,7 @@ init([]) ->
     Port = erlang:open_port({spawn, Prog},
 			    [exit_status, stream,
 			     stderr_to_stdout, {line, 80}]),
-    {ok, _TRef} = timer:send_after(?TIMEOUT_5S, timeout),
+    {ok, _TRef} = timer:send_after(?TIMEOUT_START, timeout),
     {ok, #sstate{port=Port}}.
 
 
