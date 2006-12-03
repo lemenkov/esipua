@@ -102,15 +102,10 @@ code_change(_OldVsn, StateName, StateData, _Extra)  ->
     {ok, StateName, StateData}.
 
 
-record_wave(_Cmd, StateData) ->
-%%     Handle = StateData#sstate.handle,
-%%     TargetId = command:fetch_key(targetid, Cmd),
-    Notify = StateData#sstate.id,
-%%    play_wave(Handle, TargetId, Notify, "/var/local/tmp/cvs/asterisk.net/sounds/demo-thanks.gsm").
-    yate_call:play_wave(StateData#sstate.call, Notify, "/var/local/tmp/cvs/asterisk.net/sounds/demo-congrats.gsm").
-%%    play_wave(Handle, TargetId, Notify, "/tmp/record.mulaw").
-%%    record_wave(Handle, TargetId, Notify, "/tmp/record.mulaw", 8000).
-
+record_wave(StateData) ->
+    Call = StateData#sstate.call,
+    ok = yate_call:record_wave(Call, StateData#sstate.id,
+			       "/tmp/record.alaw", 1000000).
 play_wave(StateData) ->
     Call = StateData#sstate.call,
     ok = yate_call:play_wave(Call, StateData#sstate.id,
