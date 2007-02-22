@@ -121,26 +121,26 @@ play_wave(State, Wave_file) ->
     yate_call:play_wave(State#sstate.call, State#sstate.id, Wave_file).
 
 wave_month(Month) ->
-    [["/var/local/tmp/cvs/asterisk.net/sounds/digits/mon-",
+    [[asterisk_sound_path() ++ "mon-",
      integer_to_list(Month - 1),
      ".gsm"]].
 
 wave_day(Day) ->
     if
 	Day == 31 ->
-	    ["/var/local/tmp/cvs/asterisk.net/sounds/digits/h-30.gsm",
-	     "/var/local/tmp/cvs/asterisk.net/sounds/digits/h-1.gsm"];
+	    [[asterisk_sound_path(), "h-30.gsm"],
+	     [asterisk_sound_path(), "h-1.gsm"]];
 	Day == 30  ->
-	    ["/var/local/tmp/cvs/asterisk.net/sounds/digits/h-30.gsm"];
+	    [[asterisk_sound_path(), "h-30.gsm"]];
 	Day > 20 ->
-	    [["/var/local/tmp/cvs/asterisk.net/sounds/digits/h-20.gsm"],
-	     ["/var/local/tmp/cvs/asterisk.net/sounds/digits/h-",
+	    [[asterisk_sound_path(), "h-20.gsm"],
+	     [asterisk_sound_path(), "h-",
 	      integer_to_list(Day - 20),
 	      ".gsm"]];
 	Day == 20 ->
-	    ["/var/local/tmp/cvs/asterisk.net/sounds/digits/h-20.gsm"];
+	    [[asterisk_sound_path(), "h-20.gsm"]];
 	true  ->
-	    [["/var/local/tmp/cvs/asterisk.net/sounds/digits/h-",
+	    [[asterisk_sound_path(), "h-",
 	     integer_to_list(Day),
 	     ".gsm"]]
     end.
@@ -148,7 +148,7 @@ wave_day(Day) ->
 wave_year(Year) ->
     Hundred = trunc(Year / 100),
     Rest = Year - Hundred * 100,
-    wave_number(Hundred) ++ ["/var/local/tmp/cvs/asterisk.net/sounds/digits/hundred.gsm"] ++ wave_number(Rest).
+    [wave_number(Hundred), [asterisk_sound_path(), "hundred.gsm"], wave_number(Rest)].
 
 wave_number(Number) ->
     Tens = trunc(Number / 10),
@@ -158,7 +158,7 @@ wave_number(Number) ->
 wave_tens(Tens) ->
     if
 	Tens > 0 ->
-	    [["/var/local/tmp/cvs/asterisk.net/sounds/digits/",
+	    [[asterisk_sound_path(),
 	      integer_to_list(Tens), "0.gsm"]];
 	true ->
 	    []
@@ -167,9 +167,12 @@ wave_tens(Tens) ->
 wave_ones(Ones) ->
     if
 	Ones > 0 ->
-	    [["/var/local/tmp/cvs/asterisk.net/sounds/digits/",
+	    [[asterisk_sound_path(),
 	      integer_to_list(Ones), ".gsm"]];
 	true ->
 	    []
     end.
+
+asterisk_sound_path() ->
+    "/var/local/tmp/cvs/asterisk.d/archive/asterisk.net/sounds/digits/".
 
