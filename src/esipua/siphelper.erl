@@ -20,7 +20,8 @@
 	 send_response/3, send_response/4, send_response/5, send_response/6,
 	 update_authentications/3,
 	 update_authentications/5,
-	 add_authorization/2, print_auth_response/8, get_retry_after/1,
+	 add_authorization/2,
+	 get_retry_after/1,
 	 cseq/1
 	]).
 
@@ -336,6 +337,7 @@ add_authorization2(Request, Header, Auth) when is_record(Request, request),
 					       is_record(Header, keylist),
 					       is_record(Auth, sipauth) ->
     Type = Auth#sipauth.type,
+
     Dict = Auth#sipauth.dict,
     Realm = Auth#sipauth.realm,
     Nonce = dict:fetch("nonce", Dict),
@@ -345,7 +347,8 @@ add_authorization2(Request, Header, Auth) when is_record(Request, request),
 		 Method1 ->
 		     Method1
 	     end,
-    URIstr = sipurl:print(Request#request.uri),
+    URI = Request#request.uri,
+    URIstr = sipurl:print(URI),
     Opaque = case dict:find("opaque", Dict) of
 		 {ok, Opaque1} ->
 		     Opaque1;
@@ -364,6 +367,9 @@ add_authorization2(Request, Header, Auth) when is_record(Request, request),
 	       'www-authenticate' ->
 		   "Authorization"
 	   end,
+
+%%     Header1 = sipauth:add_credentials(digest, Name, Method, URI, Header, User, Password),
+%%     {ok, Header1}.
 
     {ok, keylist:prepend({Name, [Resp_str]}, Header)}.
 

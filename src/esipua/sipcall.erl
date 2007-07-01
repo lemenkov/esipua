@@ -298,7 +298,7 @@ outgoing({drop, Status, Reason}, State) ->
 
 %% Drop incoming call
 incoming(drop, State) ->
-    outgoing({drop, 403, "Forbidden"}, State);
+    incoming({drop, 403, "Forbidden"}, State);
 incoming({drop, Status, Reason}, State) when is_integer(Status),
 						   Status >= 400,
 						   Status =< 699,
@@ -419,6 +419,9 @@ handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=R
 handle_info({branch_result, Pid, Branch, BranchState, {_Status, _Reason}=Response}, outgoing=StateName, #state{invite_pid = Pid, invite_branch = Branch} = State) ->
     handle_invite_result(Pid, Branch, BranchState, Response, StateName, State);
 handle_info({new_response, Response, YxaCtx}, StateName, State) when is_record(YxaCtx, yxa_ctx) ->
+    logger:log(normal, "200 OK retransmission received '~p ~s' to my invite",
+	       [Response#response.status, Response#response.reason]),
+
 %%     Origin = YxaCtx#yxa_ctx.origin,
 %%     LogStr = YxaCtx#yxa_ctx.logstr,
 
@@ -683,7 +686,7 @@ handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateNa
 	    Owner ! {call_redirect, self(), Response},
             {stop, normal, State};
 
-	State#state.invite_cseqno == 1, Status == 401 orelse Status == 407 ->
+	Status == 401 orelse Status == 407 ->
 	    %% FIXME store auth in config file
 	    Lookup = fun(Realm, From, To) ->
 			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),

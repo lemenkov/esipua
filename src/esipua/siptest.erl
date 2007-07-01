@@ -54,8 +54,8 @@ unregister() ->
     ok.
 
 get_aor() ->
-    "sip:2001@skinner.hem.za.org".
-%%      "sip:2001@mulder.hem.za.org".
+%%     "sip:2001@skinner.hem.za.org".
+     "sip:2001@mulder.hem.za.org".
 %%    "sip:105110603@phonzo.com".
 
 %%
