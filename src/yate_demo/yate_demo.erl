@@ -164,6 +164,14 @@ handle_call_route("demo", _Cmd, _From, State) ->
     {reply, {true, "erl/yate_demo_call/start_link"}, State};
 handle_call_route("clock", _Cmd, _From, State) ->
     {reply, {true, "erl/yate_clock/start_link"}, State};
+handle_call_route("y600", _Cmd, _From, State) ->
+    {reply, {true, "erl/sipclient/call/sip:600@mulder"}, State};
+%% handle_call_route("sftf", _Cmd, _From, State) ->
+%%     %% SFTF test framework
+%%     {reply, {true, "erl/sipclient/call/sip:sftf@192.168.0.4:5066"}, State};
+%% handle_call_route("sftf-tcp", _Cmd, _From, State) ->
+%%     %% SFTF test framework
+%%     {reply, {true, "erl/sipclient/call/sip:sftf@192.168.0.4:5066;transport=tcp"}, State};
 handle_call_route(Called, _Cmd, _From, State) ->
     error_logger:error_msg("Unhandled call.route to: ~p~n", [Called]),
     {reply, false, State}.
