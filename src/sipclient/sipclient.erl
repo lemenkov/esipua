@@ -58,8 +58,7 @@
 init() ->
     Server = {ysip_srv, {ysip_srv, start_link, [?HOST, ?PORT]},
 	      permanent, 2000, worker, [ysip_srv]},
-    Tables = [],
-    [Tables, stateful, {append, [Server]}].
+    #yxa_app_init{sup_spec={append, [Server]}}.
 
 request(#request{method="OPTIONS"}=Request, YxaCtx) when is_record(YxaCtx, yxa_ctx) ->
 %%     Origin = YxaCtx#yxa_ctx.origin,
@@ -126,7 +125,22 @@ init([]) ->
 
 %% Incoming SIP call
 init([Client, Request, LogStr, OldPid]) ->
-    init2(Client, Request, LogStr, OldPid);
+    logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
+    {ok, SipCall} = sipcall:start_link(),
+    ok = sipcall:receive_invite(SipCall, Request, OldPid),
+
+    %% TODO handle incoming call, build sipcall Pid
+    State = #state{invite=Request, sip_call=SipCall,
+		   client=Client},
+
+    try init2(State)
+    catch
+	throw:{siperror, Code, Reason} ->
+	    logger:log(normal, "sipclient ~p: drop call~n", [self()]),
+	    sipcall:drop(SipCall, Code, Reason),
+	    {stop, normal}
+    end;
+
 
 init([Client, Id, Cmd, From, [SipUri]]) ->
     {ok, Call} = yate_call_reg:get_call(Client, Id, Cmd),
@@ -175,20 +189,13 @@ init([Client, Id, Cmd, From, [SipUri]]) ->
     {ok, outgoing, State2}.
 
 %% Incoming SIP call
-init2(Client, Request, LogStr, OldPid) ->
-    {ok, Handle} = yate:open(Client),
-    logger:log(normal, "sipclient: INVITE ~s ~p~n", [LogStr, self()]),
-    {ok, Address, Port} = parse_sdp(Request),
+init2(State) ->
+    {ok, Handle} = yate:open(State#state.client),
+    {ok, Address, Port} = parse_sdp(State#state.invite),
 
-    {ok, SipCall} = sipcall:start_link(),
-    ok = sipcall:receive_invite(SipCall, Request, OldPid),
-
-    %% TODO handle incoming call, build sipcall Pid
-    State = #state{invite=Request, sip_call=SipCall,
-		   handle=Handle, address=Address, port=Port,
-		   client=Client},
+    State1 = State#state{handle=Handle, address=Address, port=Port},
 %%     {ok, _TRef} = timer:send_after(20000, timeout),
-    execute(State).
+    execute(State1).
 
 
 adopt_transaction(THandler, FromPid, ToPid) ->
@@ -199,15 +206,17 @@ adopt_transaction(THandler, FromPid, ToPid) ->
 
 
 parse_sdp(Request) when is_record(Request, request) ->
-    parse_sdp(Request#request.body);
+    Content_type = keylist:fetch('content-type', Request#request.header),
+    parse_sdp(Request#request.body, Content_type);
 
 parse_sdp(Response) when is_record(Response, response)->
-    parse_sdp(Response#response.body);
+    Content_type = keylist:fetch('content-type', Response#response.header),
+    parse_sdp(Response#response.body, Content_type).
 
-parse_sdp(Body) when is_binary(Body) ->
-    parse_sdp(binary_to_list(Body));
+parse_sdp(Body, Type) when is_binary(Body) ->
+    parse_sdp(binary_to_list(Body), Type);
 
-parse_sdp(Body) when is_list(Body) ->
+parse_sdp(Body, "application/sdp") when is_list(Body) ->
     case sdp:parse(Body) of
 	{ok, Sdp} ->
 	    [Media|_] = Sdp#sdp.media,
@@ -222,7 +231,10 @@ parse_sdp(Body) when is_list(Body) ->
 	    {ok, Address, Port};
 	{error, _Reason} ->
 	    error
-    end.
+    end;
+parse_sdp(_Body, _Content_type) ->
+    throw({siperror, 415, "Unsupported Media Type"}).
+
 
 execute(State) ->
     Call_to = "dumb/",
