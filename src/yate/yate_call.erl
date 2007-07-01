@@ -113,6 +113,7 @@ init_common(Status, Client, Args, Parent) ->
 setup(incoming, [Cmd], State) ->
     Id = command:fetch_key(id, Cmd),
     Handle = State#state.handle,
+    error_logger:info_msg("~p: ~p watch call.execute id ~p~n", [?MODULE, self(), Id]),
     ok = yate:watch(Handle, call.execute,
 		    fun(Cmd1) ->
 			    case command:find_key(module, Cmd1) of
