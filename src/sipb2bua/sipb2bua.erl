@@ -13,7 +13,6 @@
 
 -behaviour(gen_fsm).
 
-
 %% api
 -export([]).
 
@@ -27,7 +26,7 @@
 	 handle_info/3,
 	 terminate/3,
 
-	 init/3
+	 initial/3
 	]).
 
 -record(state, {
@@ -45,12 +44,12 @@
 %% yxa_app callbacks
 -export([init/0, request/2,  response/2]).
 
+%%-include("siprecords.hrl").
 -include("siprecords.hrl").
 -include("sipsocket.hrl").
 
 init() ->
-    Tables = [],
-    [Tables, stateful, {append, []}].
+    #yxa_app_init{}.
 
 request(#request{method="INVITE"}=Request, YxaCtx) when is_record(YxaCtx, yxa_ctx) ->
 %%     Origin = YxaCtx#yxa_ctx.origin,
@@ -58,9 +57,10 @@ request(#request{method="INVITE"}=Request, YxaCtx) when is_record(YxaCtx, yxa_ct
 
     {ok, Pid} = start_link(LogStr),
     ok = receive_invite(Pid, Request);
-request(_Request, YxaCtx) when is_record(YxaCtx, yxa_ctx) ->
+request(Request, YxaCtx) when is_record(YxaCtx, yxa_ctx) ->
     LogStr = YxaCtx#yxa_ctx.logstr,
     logger:log(normal, "sipb2bua: Request ~s", [LogStr]),
+    siphelper:send_response(Request, 501 ,"Not Implemented"),
     ok.
 
 
@@ -114,10 +114,10 @@ init([]) ->
 init([LogStr, OldPid]) ->
     process_flag(trap_exit, true),
     logger:log(normal, "sipb2bua: INVITE ~s ~p~n", [LogStr, self()]),
-    {ok, init, #state{old_pid=OldPid}}.
+    {ok, initial, #state{old_pid=OldPid}}.
 
 
-init({receive_invite, Request}, _From, State) ->
+initial({receive_invite, Request}, _From, State) ->
     Callid = sipheader:callid(Request#request.header),
     {ok, SipCall} = sipcall:start(Callid),
     ok = sipcall:receive_invite(SipCall, Request, State#state.old_pid),
@@ -126,8 +126,9 @@ init({receive_invite, Request}, _From, State) ->
     Body = Request#request.body,
     Uri = Request#request.uri,
 
-    [Target] = url_param:find(Uri#sipurl.param_pairs, "target"),
-    TargetUri = sipurl:parse(Target),
+%%     [Target] = url_param:find(Uri#sipurl.param_pairs, "target"),
+%%     TargetUri = sipurl:parse(Target),
+    TargetUri = Uri,
 
     {FromName, FromUri} = sipheader:from(Header),
     FromContact = contact:new(FromName, FromUri, []),
@@ -137,18 +138,39 @@ init({receive_invite, Request}, _From, State) ->
 
 %%     UriContact = contact:new(Uri),
     UriContact = contact:new(TargetUri),
-
     {ok, Outgoing_inv} = sipcall:build_invite(FromContact, UriContact, Body),
+
+    IsHomedomain = local:homedomain(Uri),
+    Out_header = Outgoing_inv#request.header,
+    Out_header2 =
+	if
+	    IsHomedomain ->
+		%% Add route to incoming proxy
+		Out_header1 =
+		    keylist:prepend({"Route", ["<sip:skinner.hem.za.org;lr>"]},
+				    Out_header),
+		logger:log(normal, "sipb2bua: header ~p ~p~n", [self(), Out_header1]),
+		Out_header1;
+	    true ->
+		%% Send directly to target
+		Out_header
+	end,
+
+%%	    ok = sipcall:drop(SipCall, Status, Reason),
+
+    Out_header3 = keylist:set("User-Agent", ["YXA-sipb2bua/0.1"], Out_header2),
+
+    Outgoing_inv1 = Outgoing_inv#request{header=Out_header3},
     
-    OutCallid = sipheader:callid(Outgoing_inv#request.header),
+    OutCallid = sipheader:callid(Outgoing_inv1#request.header),
     {ok, Outgoing_call} = sipcall:start(OutCallid),
-    ok = sipcall:send_invite(Outgoing_call, Outgoing_inv),
+    ok = sipcall:send_invite(Outgoing_call, Outgoing_inv1),
 
     Contact = "<sip:dummy@192.168.0.2:5080>",
 
     State1 = State#state{invite=Request,
 		   outgoing_call=Outgoing_call,
-		   outgoing_inv=Outgoing_inv,
+		   outgoing_inv=Outgoing_inv1,
 		   incoming_call=SipCall,
 		   contact=Contact
 		  },
@@ -174,7 +196,19 @@ handle_info({call_drop, SipCall, Response}, _StateName, #state{outgoing_call=Sip
     Call = State#state.incoming_call,
     Status = Response#response.status,
     Reason = Response#response.reason,
-    ok = sipcall:drop(Call, Status, Reason),
+    {Status1, Reason1} =
+	case Status of
+	    401 ->
+		{503, "Service Unavailable"};
+	    403 ->
+		{503, "Service Unavailable"};
+	    407 ->
+		{503, "Service Unavailable"};
+	    _ ->
+		{Status, Reason}
+	end,
+ 
+    ok = sipcall:drop(Call, Status1, Reason1),
     {stop, normal, State};
 
 handle_info({call_drop, SipCall, Request}, _StateName, #state{incoming_call=SipCall}=State) when is_record(Request, request) ->
