@@ -20,4 +20,4 @@
   {mod, {sipserver, [sipb2bua]}},
   {env, []},
   {applications,
-        [kernel, stdlib, esipua]}]}.
+        [kernel, stdlib, sipua]}]}.

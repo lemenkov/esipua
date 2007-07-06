@@ -1,12 +1,12 @@
 include $(top_srcdir)/rules.mk
 
-OPT_APP = esipua
+OPT_APP = sipua
 
-esipua_VSN = 1.0
+sipua_VSN = 1.0
 
-esipua_SRCS = \
-esipua_app.erl \
-esipua_sup.erl \
+sipua_SRCS = \
+sipua_app.erl \
+sipua_sup.erl \
 callregister.erl \
 register_server.erl \
 register_sup.erl \
@@ -17,11 +17,11 @@ siphelper.erl \
 sipregister.erl \
 siptest.erl
 
-esipua_HDRS = \
+sipua_HDRS = \
 sdp.hrl \
 sipclient.hrl
 
 AM_ERLCFLAGS = -I$(top_srcdir)/include
 
 run:
-	$(ERL) $(AM_ERL_FLAGS) $(ERL_FLAGS) -name eryate -boot esipua -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -s appmon start
+	$(ERL) $(AM_ERL_FLAGS) $(ERL_FLAGS) -name eryate -boot sipua -sasl sasl_error_logger '{file,"sasl.log"}' -mnesia dir '"/var/tmp/mnesia/eryate"' -s appmon start

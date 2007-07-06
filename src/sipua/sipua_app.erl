@@ -1,11 +1,11 @@
 %%%-------------------------------------------------------------------
-%%% File    : esipua.erl
+%%% File    : sipua.erl
 %%% Author  : Mikael Magnusson <mikael@skinner.hem.za.org>
 %%% Description : 
 %%%
 %%% Created : 30 Oct 2006 by Mikael Magnusson <mikael@skinner.hem.za.org>
 %%%-------------------------------------------------------------------
--module(esipua_app).
+-module(sipua_app).
 
 -behaviour(application).
 
@@ -28,7 +28,7 @@
 %% top supervisor of the tree.
 %%--------------------------------------------------------------------
 start(_Type, []) ->
-    case esipua_sup:start_link() of
+    case sipua_sup:start_link() of
 	{ok, Pid} -> 
 	    {ok, Pid};
 	Error ->
@@ -46,8 +46,8 @@ stop(_State) ->
 
 make() ->
     Modules = [
-		"esipua_app",
-		"esipua_sup",
+		"sipua_app",
+		"sipua_sup",
 		"callregister",
 		"register_server",
 		"register_sup",
@@ -59,14 +59,14 @@ make() ->
 		"siptest"
 	    ],
 
-    Prefix = "../../../src/esipua/",
+    Prefix = "../../../src/sipua/",
     Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
 
     make:files(Files,
 	       [load,
 		{i, "../../../include"},
 		{i, "/usr/lib/yxa/include"},
-		{outdir, "../../src/esipua"},
+		{outdir, "../../src/sipua"},
 		debug_info]).
 
 %%====================================================================

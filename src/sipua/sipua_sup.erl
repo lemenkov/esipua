@@ -1,11 +1,11 @@
 %%%-------------------------------------------------------------------
-%%% File    : esipua_sup.erl
+%%% File    : sipua_sup.erl
 %%% Author  : Mikael Magnusson <mikael@skinner.hem.za.org>
 %%% Description : 
 %%%
 %%% Created : 30 Oct 2006 by Mikael Magnusson <mikael@skinner.hem.za.org>
 %%%-------------------------------------------------------------------
--module(esipua_sup).
+-module(sipua_sup).
 
 -behaviour(supervisor).
 

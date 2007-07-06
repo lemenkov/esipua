@@ -54,7 +54,7 @@ AC_CONFIG_FILES([
 		 src/Makefile
 		 src/yate/Makefile
 		 src/yate_demo/Makefile
-		 src/esipua/Makefile
+		 src/sipua/Makefile
 		 src/sipb2bua/Makefile
 		 src/sipclient/Makefile
 		])

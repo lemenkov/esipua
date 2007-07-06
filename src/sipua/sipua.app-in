@@ -1,10 +1,10 @@
-{application, esipua,
+{application, sipua,
  [{description, "Erlang SIP User Agent"},
   {vsn,"0.0"},
   {modules, [
              callregister,
-             esipua_app,
-             esipua_sup,
+             sipua_app,
+             sipua_sup,
              register_server,
              register_sup,
              sdp,
@@ -16,11 +16,11 @@
             ]},
   {registered, [
              callregister,
-             esipua_sup,
+             sipua_sup,
              register_server,
              register_sup
                ]},
-  {mod, {esipua_app, []}},
+  {mod, {sipua_app, []}},
   {env, []},
   {applications,
         [kernel, stdlib]}]}.

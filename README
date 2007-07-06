@@ -1,0 +1,41 @@
+eryate
+======
+
+yate - Erlang yate scripting
+yate_demo - Yate demo extensions: demo, clock
+esipua - Erlang SIP UA application and library
+sipb2bua - SIP back-2-back UA, request URI = target URI
+sipclient - Erlang SIP UA with Yate as media gateway using
+  an external connection.
+
+
+
+
+
+
+
+2006-09-30 23:37:17.653 normal<0.8022.0>:z9hG4bK-yxa-9djrsxvtq+3o36ws4cj7ka-UAS BYE: Responding '200 Ok'
+
+=ERROR REPORT==== 30-Sep-2006::23:37:17 ===
+sipcall: Terminated normal
+2006-09-30 23:37:17.652 normal<0.8009.0>:Dialog ended by remote end (using BYE)
+2006-09-30 23:37:17.773 error<0.8022.0>:z9hG4bK-yxa-9djrsxvtq+3o36ws4cj7ka-UAS BYE: Parent <0.8009.0> exited ABNORMALLY, my SIP-state is completed so I'll ignore it.
+
+
+Removed from yate_demo.erl
+
+handle_call_route("echo2", _Cmd, _From, State) ->
+    {reply, {true, "erl/sipclient/call/sip:600@mulder"}, State};
+handle_call_route("mulder3;" ++ Exten, _Cmd, _From, State) ->
+    {reply, {true, "erl/sipclient/call/sip:" ++ Exten ++ "@mulder"}, State};
+handle_call_route("mikael", _Cmd, _From, State) ->
+    error_logger:info_msg("Route mikael~n"),
+    {reply, {true, "sip/sip:1002@mulder"}, State};
+handle_call_route("3002", _Cmd, _From, State) ->
+    {reply, {true, "erl/sipclient/call/sip:2002@skinner.hem.za.org"}, State};
+handle_call_route("dial", _Cmd, _From, State) ->
+    {reply, {true, "erl/sipclient/call/sip:99991001@192.168.0.7:5080"}, State};
+handle_call_route("ydial", _Cmd, _From, State) ->
+    {reply, {true, "sip/sip:99991001@192.168.0.7:5072"}, State};
+handle_call_route("reason=" ++ ReasonStr, _Cmd, _From, State) ->
+    {reply, {true, "reason/" ++ ReasonStr}, State};

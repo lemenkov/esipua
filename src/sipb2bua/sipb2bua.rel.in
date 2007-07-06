@@ -3,5 +3,5 @@
  [{kernel,"@ERLANG_LIB_VER_kernel@"},
   {stdlib,"@ERLANG_LIB_VER_stdlib@"},
   {sasl,"@ERLANG_LIB_VER_sasl@"},
-  {esipua,"0.0"},
+  {sipua,"0.0"},
   {sipb2bua, "0.0"}]}.
