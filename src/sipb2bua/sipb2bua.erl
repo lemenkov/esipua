@@ -293,7 +293,7 @@ make() ->
     make:files(Files,
 	       [load,
 		{i, "../../../include"},
-		{i, "../../../src/esipua"},
+		{i, "../../../src/sipua"},
 		{i, "/usr/lib/yxa/include"},
 		{outdir, "../../src/sipb2bua"},
 		debug_info]).

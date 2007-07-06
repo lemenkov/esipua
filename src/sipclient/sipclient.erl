@@ -623,8 +623,7 @@ make() ->
 	       [load,
 		{i, "../../../include"},
 		{i, "../../../src/yate"},
-		{i, "../../../src/esipua"},
-		{i, "../../../src/esipua"},
+		{i, "../../../src/sipua"},
 		{i, "/usr/lib/yxa/include"},
 		{outdir, "../../src/sipclient"},
 		debug_info]).
