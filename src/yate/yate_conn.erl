@@ -6,7 +6,7 @@
 -module(yate_conn).
 
 %% api
--export([connect/3, stop/1, install/2, install/3, uninstall/2, watch/2, unwatch/2, ret/3, ret/4, queue_msg/4, send_msg/3]).
+-export([stop/1, install/2, install/3, uninstall/2, watch/2, unwatch/2, ret/3, ret/4, queue_msg/4, send_msg/3]).
 
 -include("yate.hrl").
 
@@ -18,8 +18,8 @@
 %% @doc Connect to Yate extmodule
 %% @end
 %%--------------------------------------------------------------------
-connect(Host, Port, Pid) ->
-    yate_sup:start_child(Host, Port, Pid).
+%% connect(Host, Port, Pid) ->
+%%     yate_sup:start_child(Host, Port, Pid).
 
 %%--------------------------------------------------------------------
 %% @spec watch(Handle, Name) -> true

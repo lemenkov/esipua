@@ -24,7 +24,6 @@ yate_notify.erl \
 yate_pending.erl \
 yate_port_srv.erl \
 yate_port_sup.erl \
-yate_reg_srv.erl \
 yate_srv.erl \
 yate_test.erl \
 yate_util.erl \

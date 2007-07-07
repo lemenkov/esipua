@@ -52,9 +52,10 @@ test_command(Data) ->
     case yate_decode:decode_command(Data) of
 	{ok, _Dir, _Cmd} ->
 %% 	    my_trace("OK: ", [Cmd]),
-	    ok;
-	{error, Reason} ->
-	    my_trace("Decode error", [Reason])
+	    ok
+	%% Dead code
+%% 	{error, Reason} ->
+%% 	    my_trace("Decode error", [Reason])
     end.
 
 

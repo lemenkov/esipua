@@ -80,9 +80,9 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
-handle_call({connect, Host, Port}, _From, State) ->
-    {ok, Conn} = yate_sup:start_conn(Host, Port, self()),
-    {reply, ok, State#sstate{conn=Conn}};
+%% handle_call({connect, Host, Port}, _From, State) ->
+%%     {ok, Conn} = yate_sup:start_conn(Host, Port, self()),
+%%     {reply, ok, State#sstate{conn=Conn}};
 handle_call({client, {install, Name, Fun}, Pid}, _From, State) ->
     Installed = State#sstate.installed,
     {ok, NewInstalled, NewPids} = install(install, Name, Pid, Fun, State, Installed),
