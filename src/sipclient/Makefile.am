@@ -1,4 +1,4 @@
-include $(top_srcdir)/application.mk
+include $(top_srcdir)/app.mk
 
 OPT_APP = sipclient
 
