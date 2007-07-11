@@ -1,4 +1,4 @@
-include $(top_srcdir)/rules.mk
+include $(top_srcdir)/application.mk
 
 bin_PROGRAMS = wrapper
 

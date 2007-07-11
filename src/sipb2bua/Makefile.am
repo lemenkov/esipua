@@ -1,4 +1,4 @@
-include $(top_srcdir)/rules.mk
+include $(top_srcdir)/application.mk
 
 OPT_APP = sipb2bua
 

@@ -16,7 +16,6 @@
 	     yate_pending,
 	     yate_port_srv,
 	     yate_port_sup,
-	     yate_reg_srv,
 	     yate_srv,
 	     yate_test,
 	     yate_util

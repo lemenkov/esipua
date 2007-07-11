@@ -3,13 +3,11 @@ bindir = $(libsubdir)/bin
 ebindir = $(libsubdir)/ebin
 incdir = $(libsubdir)/include
 
-inc_HEADERS = $($(OPT_APP)_HDRS)
-beam_FILES = $($(OPT_APP)_SRCS:.erl=.beam)
-
-ebin_DATA = $(beam_FILES) $(OPT_APP:=.app) $(OPT_APP:=.boot)
-EXTRA_DIST = $($(OPT_APP)_SRCS) $(OPT_APP:=.app-in) $(OPT_APP:=.rel.in)
-CLEANFILES = $(beam_FILES) $(OPT_APP:=.app) $(OPT_APP:=.boot) $(OPT_APP:=.rel)	\
-$(OPT_APP:=.script)
+ebin_DATA = $(OPT_RELEASES:=.boot) $(OPT_RELEASES:=.rel)	\
+$(OPT_RELEASES:=.script)
+EXTRA_DIST = $(OPT_RELEASES:=.rel.in)
+CLEANFILES = $(OPT_RELEASES:=.boot) $(OPT_RELEASES:=.rel)	\
+$(OPT_RELEASES:=.script)
 
 SUBST = sed \
 	-e 's,[@]ERLANG_LIB_VER_kernel[@],$(ERLANG_LIB_VER_kernel),g' \
@@ -19,13 +17,6 @@ SUBST = sed \
 %.rel: %.rel.in
 	$(SUBST) $< > $@
 
-%.beam: %.erl
-	@echo [ERLC] $@
-	@$(ERLC) $(AM_ERL_FLAGS) $(ERL_FLAGS) $(AM_ERLCFLAGS) $(ERLCFLAGS) $<
-
-%.app: %.app-in
-	cp $< $@
-
-%.boot: %.rel %.app
+%.boot: %.rel
 	@echo [ERLC] $@
 	@$(ERLC) $(AM_ERL_FLAGS) $(ERL_FLAGS) $(AM_ERLCFLAGS) $(ERLCFLAGS) $<

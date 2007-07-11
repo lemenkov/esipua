@@ -1,7 +1,8 @@
 %% Erlang OTP R11B-1 library versions
-{release, {"SIP Back-2-Back User Agent (B2BUA)","0.0"}, {erts, "5.2"},
+{release, {"Yate module","0.0"}, {erts, "5.2"},
  [{kernel,"@ERLANG_LIB_VER_kernel@"},
   {stdlib,"@ERLANG_LIB_VER_stdlib@"},
   {sasl,"@ERLANG_LIB_VER_sasl@"},
-  {sipua,"0.0"},
-  {sipb2bua, "0.0"}]}.
+  {yate, "0.0"},
+  {sipua, "0.0"},
+  {sipclient, "0.0"}]}.

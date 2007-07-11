@@ -1,9 +1,0 @@
-%% Erlang OTP R11B-1 library versions
-{release, {"Yate module","0.0"}, {erts, "5.2"},
- [{kernel,"@ERLANG_LIB_VER_kernel@"},
-  {stdlib,"@ERLANG_LIB_VER_stdlib@"},
-  {sasl,"@ERLANG_LIB_VER_sasl@"},
-  {yate, "0.0"},
-  {yate_demo, "0.0"},
-  {sipua, "0.0"},
-  {sipclient, "0.0"}]}.

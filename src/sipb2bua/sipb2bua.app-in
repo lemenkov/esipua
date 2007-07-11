@@ -5,19 +5,19 @@
 	     sipb2bua
             ]},
   {registered, [
-                dialog_server,
-                event_mgr,
-                ldap_client,
-                logger,
-                sipsocket_blacklist,
-                sipsocket_udp,
-                tcp_dispatcher,
-                transactionlayer,
-                transportlayer,
-                yxa_config,
-                yxa_monitor
+%%                dialog_server,
+%%                event_mgr,
+%%                ldap_client,
+%%                logger,
+%%                sipsocket_blacklist,
+%%                sipsocket_udp,
+%%                tcp_dispatcher,
+%%                transactionlayer,
+%%                transportlayer,
+%%                yxa_config,
+%%                yxa_monitor
                ]},
   {mod, {sipserver, [sipb2bua]}},
   {env, []},
   {applications,
-        [kernel, stdlib, sipua]}]}.
+        [kernel, stdlib, sipua, sipserver]}]}.

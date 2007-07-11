@@ -57,6 +57,7 @@ AC_CONFIG_FILES([
 		 src/sipua/Makefile
 		 src/sipb2bua/Makefile
 		 src/sipclient/Makefile
+		 releases/Makefile
 		])
 
 AC_OUTPUT
