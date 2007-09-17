@@ -1,9 +1,9 @@
 %%%-------------------------------------------------------------------
 %%% File    : sipua_sup.erl
-%%% Author  : Mikael Magnusson <mikael@skinner.hem.za.org>
+%%% Author  : Mikael Magnusson <mikma@users.sourceforge.net>
 %%% Description : 
 %%%
-%%% Created : 30 Oct 2006 by Mikael Magnusson <mikael@skinner.hem.za.org>
+%%% Created : 30 Oct 2006 by Mikael Magnusson <mikma@users.sourceforge.net>
 %%%-------------------------------------------------------------------
 -module(sipua_sup).
 

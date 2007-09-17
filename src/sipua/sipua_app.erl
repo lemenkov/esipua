@@ -1,9 +1,9 @@
 %%%-------------------------------------------------------------------
 %%% File    : sipua.erl
-%%% Author  : Mikael Magnusson <mikael@skinner.hem.za.org>
+%%% Author  : Mikael Magnusson <mikma@users.sourceforge.net>
 %%% Description : 
 %%%
-%%% Created : 30 Oct 2006 by Mikael Magnusson <mikael@skinner.hem.za.org>
+%%% Created : 30 Oct 2006 by Mikael Magnusson <mikma@users.sourceforge.net>
 %%%-------------------------------------------------------------------
 -module(sipua_app).
 
@@ -11,8 +11,6 @@
 
 %% Application callbacks
 -export([start/2, stop/1]).
-
--export([make/0]).
 
 %%====================================================================
 %% Application callbacks
@@ -43,31 +41,6 @@ start(_Type, []) ->
 %%--------------------------------------------------------------------
 stop(_State) ->
     ok.
-
-make() ->
-    Modules = [
-		"sipua_app",
-		"sipua_sup",
-		"callregister",
-		"register_server",
-		"register_sup",
-		"sdp",
-		"sipcall_bye",
-		"sipcall",
-		"siphelper",
-		"sipregister",
-		"siptest"
-	    ],
-
-    Prefix = "../../../src/sipua/",
-    Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
-
-    make:files(Files,
-	       [load,
-		{i, "../../../include"},
-		{i, "/usr/lib/yxa/include"},
-		{outdir, "../../src/sipua"},
-		debug_info]).
 
 %%====================================================================
 %% Internal functions
