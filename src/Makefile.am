@@ -1,1 +1,1 @@
-SUBDIRS = yate yate_demo sipua sipb2bua sipclient
+SUBDIRS = sipua sipb2bua
