@@ -11,8 +11,7 @@
              sipcall_bye,
              sipcall,
              siphelper,
-             sipregister,
-             siptest
+             sipregister
             ]},
   {registered, [
              callregister,

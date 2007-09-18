@@ -14,8 +14,7 @@ sdp.erl \
 sipcall_bye.erl \
 sipcall.erl \
 siphelper.erl \
-sipregister.erl \
-siptest.erl
+sipregister.erl
 
 sipua_HDRS = \
 sdp.hrl \
