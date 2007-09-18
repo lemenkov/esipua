@@ -109,14 +109,14 @@ handle_call({register, Aor}, _From, State) ->
 handle_call({unregister, Aor}, _From, State) ->
     case register_sup:find_child(Aor) of
 	{ok, undefined} ->
-	    {reply, ok, State};
+	    {reply, undefined, State};
 
 	{ok, Pid} ->
-	    ok = sipregister:send_unregister(Pid),
-	    {reply, ok, State};
+	    Res = sipregister:send_unregister(Pid),
+	    {reply, Res, State};
 
 	error ->
-	    {reply, ok, State}
+	    {reply, error, State}
     end;
 
 handle_call(Request, _From, State) ->

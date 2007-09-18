@@ -190,7 +190,6 @@ handle_info({branch_result, Pid, Branch, _BranchState, #response{status=Status}=
 
 	% Success
 	Status >= 200, Status =< 299 ->
-	    %% FIXME use expires for first contact, to support NAT
 	    Expires = find_expires(State#state.contact_urlstr, Response),
 	    error_logger:info_msg("~p: Expires ~p~n", [?MODULE, Expires]),
 
@@ -227,7 +226,13 @@ handle_info({branch_result, Pid, Branch, _BranchState, #response{status=Status}=
 	Status == 401; Status == 407 ->
 	    Lookup = fun(Realm, From, To) ->
 			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),
- 			     {ok, "2001", "test"}
+			     case sipuserdb:get_user_with_address(From) of
+				 nomatch ->
+				     noauth;
+				 User ->
+				     Pass = sipuserdb:get_password_for_user(User),
+				     {ok, User, Pass}
+			     end
 		     end,
 	    {ok, Auths, Changed} = siphelper:update_authentications(Response, Lookup, State#state.auths),
 
@@ -336,13 +341,38 @@ send_event(NextStateName, State) ->
 
 
 find_expires(Aor, Response) when is_list(Aor), is_record(Response, response) ->
+    case find_expires2(Aor, Response) of
+	undefined ->
+	    %% Try NAT:ed address
+	    Top_via = sipheader:topvia(Response#response.header),
+	    Param_dict = sipheader:param_to_dict(Top_via#via.param),
+	    case dict:find("received", Param_dict) of
+		{ok, Received} ->
+		    Aor_url = sipurl:parse(Aor),
+		    Aor_received_url = Aor_url#sipurl{host=Received},
+		    Aor_received = sipurl:print(Aor_received_url),
+
+		    case find_expires2(Aor_received, Response) of
+			undefined ->
+			    0;
+			Expires ->
+			    Expires
+		    end;
+		error ->
+		    0
+	    end;
+	Expires ->
+	    Expires
+    end.
+
+find_expires2(Aor, Response) when is_list(Aor), is_record(Response, response) ->
     Contacts_str = keylist:fetch('contact', Response#response.header),
     Contacts = contact:parse(Contacts_str),
-    find_expires(Aor, Response, Contacts).
+    find_expires2(Aor, Response, Contacts).
     
-find_expires(_Aor, _Response, []) ->
-    0;
-find_expires(Aor, Response, [#contact{urlstr=Aor}=Contact|_R]) ->
+find_expires2(_Aor, _Response, []) ->
+    undefined;
+find_expires2(Aor, Response, [#contact{urlstr=Aor}=Contact|_R]) ->
     Expires =
 	case contact_param:find(Contact#contact.contact_param, "expires") of
 	    [] ->
@@ -352,6 +382,6 @@ find_expires(Aor, Response, [#contact{urlstr=Aor}=Contact|_R]) ->
 		Expires1
 	end,
     list_to_integer(Expires);
-find_expires(Aor, Response, [Contact|R]) when is_record(Contact, contact) ->
+find_expires2(Aor, Response, [Contact|R]) when is_record(Contact, contact) ->
     error_logger:info_msg("~p: No match ~p ~p~n", [?MODULE, Aor, Contact#contact.urlstr]),
-    find_expires(Aor, Response, R).
+    find_expires2(Aor, Response, R).
