@@ -280,20 +280,3 @@ handle_info(Info, StateName, State) ->
 terminate(Reason, _StateName, _State) ->
     error_logger:error_msg("~p: Terminated ~p~n", [?MODULE, Reason]),
     terminated.
-
-
-make() ->
-    Modules = [
-		"sipb2bua"
-	    ],
-
-    Prefix = "../../../src/sipb2bua/",
-    Files = lists:map(fun(File) -> Prefix ++ File end, Modules),
-
-    make:files(Files,
-	       [load,
-		{i, "../../../include"},
-		{i, "../../../src/sipua"},
-		{i, "/usr/lib/yxa/include"},
-		{outdir, "../../src/sipb2bua"},
-		debug_info]).

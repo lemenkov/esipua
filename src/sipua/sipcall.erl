@@ -391,7 +391,7 @@ handle_info(timeout, incoming=StateName, State) ->
 %% BYE response
 %% TODO handle BYE response from SIP core?
 handle_info({branch_result, Pid, Branch, BranchState, #response{status=Status}=Response}, bye_sent=StateName, #state{bye_pid = Pid, bye_branch = Branch} = State) ->
-    logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
+    logger:log(normal, "~s: branch_result: ~p ~p~n", [?MODULE, BranchState, Status]),
     if
         BranchState == completed, Status >= 200, Status =< 299 ->
 	    logger:log(normal, "Terminate dialog: ~p ~p", [BranchState, Status]),
@@ -670,7 +670,7 @@ handle_invite_result(Pid, Branch, BranchState, #response{status=Status, reason=R
     handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateName, State).
 
 handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateName, State) ->
-    logger:log(normal, "branch_result: ~p ~p~n", [BranchState, Status]),
+    logger:log(normal, "~s: branch_result: ~p ~p~n", [?MODULE, BranchState, Status]),
     Owner = State#state.owner,
     if
 	Status >= 101, Status =< 199 ->
@@ -736,7 +736,7 @@ handle_invite_2xx(_Pid, _Branch, _BranchState, Response, outgoing=_StateName, St
     {ok, Ack, Dialog1} =
 	siphelper:generate_new_request("ACK", Dialog, State#state.contact,
 			     State#state.invite_cseqno),
-%%     {ok, _SendingSocket, _Dst, _TLBranch} = send_ack(Ack, State#state.auths),
+    {ok, _SendingSocket, _Dst, _TLBranch} = siphelper:send_ack(Ack, State#state.auths),
 
     Owner ! {call_answered, self(), Response},
 
