@@ -687,7 +687,6 @@ handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateNa
             {stop, normal, State};
 
 	Status == 401 orelse Status == 407 ->
-	    %% FIXME store auth in config file
 	    Lookup = fun(Realm, From, To) ->
 			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),
 			     case sipuserdb:get_user_with_address(From) of
