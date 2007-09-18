@@ -258,6 +258,8 @@ sipauth_new(Type, Response, AuthDict, Lookup) ->
 
     From = keylist:fetch('from', Response#response.header),
     To = keylist:fetch('to', Response#response.header),
+    [From_contact] = contact:parse(From),
+
     Realm = dict:fetch("realm", AuthDict),
     Stale =
 	case dict:find("stale", AuthDict) of
@@ -268,7 +270,7 @@ sipauth_new(Type, Response, AuthDict, Lookup) ->
 	end,
 
     {User, Pass} =
-	case Lookup(Realm, From, To) of
+	case Lookup(Realm, From_contact#contact.urlstr, To) of
 	    {ok, User1, Pass1} ->
 		{User1, Pass1};
 	    noauth ->

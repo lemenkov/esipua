@@ -690,7 +690,13 @@ handle_invite_result(Pid, Branch, BranchState, Response, Status, Reason, StateNa
 	    %% FIXME store auth in config file
 	    Lookup = fun(Realm, From, To) ->
 			     error_logger:info_msg("~p: fun ~p ~p ~p~n", [?MODULE, Realm, From, To]),
- 			     {ok, "2001", "test"}
+			     case sipuserdb:get_user_with_address(From) of
+				 nomatch ->
+				     noauth;
+				 User ->
+				     Pass = sipuserdb:get_password_for_user(User),
+				     {ok, User, Pass}
+			     end
 		     end,
 	    {ok, Auths, Changed} = siphelper:update_authentications(Response, Lookup, State#state.auths),
 

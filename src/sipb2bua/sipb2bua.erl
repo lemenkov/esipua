@@ -137,17 +137,17 @@ initial({receive_invite, Request}, _From, State) ->
     UriContact = contact:new(TargetUri),
     {ok, Outgoing_inv} = sipcall:build_invite(FromContact, UriContact, Body),
 
-    IsHomedomain = local:homedomain(Uri),
+%%     IsHomedomain = local:homedomain(Uri),
     Out_header = Outgoing_inv#request.header,
     Out_header2 =
 	if
-	    IsHomedomain ->
-		%% Add route to incoming proxy
-		Out_header1 =
-		    keylist:prepend({"Route", ["<sip:skinner.hem.za.org;lr>"]},
-				    Out_header),
-		logger:log(normal, "sipb2bua: header ~p ~p~n", [self(), Out_header1]),
-		Out_header1;
+%% 	    IsHomedomain ->
+%% 		%% Add route to incoming proxy
+%% 		Out_header1 =
+%% 		    keylist:prepend({"Route", ["<sip:xxx;lr>"]},
+%% 				    Out_header),
+%% 		logger:log(normal, "sipb2bua: header ~p ~p~n", [self(), Out_header1]),
+%% 		Out_header1;
 	    true ->
 		%% Send directly to target
 		Out_header
