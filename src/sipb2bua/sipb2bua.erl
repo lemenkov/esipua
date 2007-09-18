@@ -32,8 +32,7 @@
 		invite,				% INVITE request
 		incoming_call,			% SIP call (Pid)
 		outgoing_call,			% SIP call (Pid)
-		outgoing_inv,			% SIP call (Pid)
-		contact				% Local contact
+		outgoing_inv			% SIP call (Pid)
 	       }).
 
 -define(SERVER, ?MODULE).
@@ -164,13 +163,10 @@ initial({receive_invite, Request}, _From, State) ->
     {ok, Outgoing_call} = sipcall:start(OutCallid),
     ok = sipcall:send_invite(Outgoing_call, Outgoing_inv1),
 
-    Contact = "<sip:dummy@192.168.0.2:5080>",
-
     State1 = State#state{invite=Request,
 		   outgoing_call=Outgoing_call,
 		   outgoing_inv=Outgoing_inv1,
-		   incoming_call=SipCall,
-		   contact=Contact
+		   incoming_call=SipCall
 		  },
     {reply, ok, start, State1}.
 
