@@ -16,8 +16,6 @@
 %% api
 -export([]).
 
--export([make/0]).
-
 %% gen_fsm callbacks
 -export([init/1,
 	 code_change/4,
