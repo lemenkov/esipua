@@ -11,6 +11,6 @@ SUBST = sed $(ERLANG_LIB_VER_SUBST) \
 %.app: %.app-in
 	$(SUBST) $< > $@
 
-%.boot: %.rel %.app
+%.boot: %.rel
 	@echo [ERLC] $@
 	@$(ERLC) $(AM_ERL_FLAGS) $(ERL_FLAGS) $(AM_ERLCFLAGS) $(ERLCFLAGS) $<

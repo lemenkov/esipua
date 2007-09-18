@@ -1,10 +1,9 @@
 include $(top_srcdir)/rules/rel.mk
 
-OPT_RELEASES = sipua sipb2bua
+OTP_RELEASES = sipua sipb2bua
 
-AM_ERL_FLAGS = -pa $(top_builddir)/src/yate -pa			\
-$(top_builddir)/src/yate_demo -pa $(top_builddir)/src/sipua -pa	\
-$(top_builddir)/src/sipb2bua -pa $(top_builddir)/src/sipclient
+AM_ERL_FLAGS = -pa $(top_builddir)/src/sipua -pa	\
+$(top_builddir)/src/sipb2bua
 
 run:
 	$(ERL) $(AM_ERL_FLAGS) $(ERL_FLAGS) $(AM_ERLCFLAGS) $(ERLCFLAGS)

@@ -1,6 +1,6 @@
 include $(top_srcdir)/rules/app.mk
 
-OPT_APP = sipb2bua
+OTP_APP = sipb2bua
 
 sipb2bua_VSN = 1.0
 

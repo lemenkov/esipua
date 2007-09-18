@@ -1,6 +1,6 @@
 include $(top_srcdir)/rules/app.mk
 
-OPT_APP = sipua
+OTP_APP = sipua
 
 sipua_VSN = 1.0
 
