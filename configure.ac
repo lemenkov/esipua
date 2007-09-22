@@ -32,6 +32,7 @@ AC_ERLANG_LIB_VER(kernel)
 AC_ERLANG_LIB_VER(stdlib)
 AC_ERLANG_LIB_VER(sasl)
 AC_ERLANG_LIB_VER(inets)
+dnl AC_ERLANG_CHECK_LIB(yxa)
 
 AC_SUBST(ERL_FLAGS)
 
@@ -39,6 +40,7 @@ AC_CONFIG_FILES([
 		 Makefile
 		 include/Makefile
 		 sipua/Makefile
+		 sipua/include/Makefile
 		 sipua/src/Makefile
 		 sipb2bua/Makefile
 		 sipb2bua/src/Makefile

@@ -16,10 +16,6 @@ sipcall.erl \
 siphelper.erl \
 sipregister.erl
 
-sipua_HDRS = \
-sdp.hrl \
-sipclient.hrl
-
 AM_ERLCFLAGS = -I$(top_srcdir)/include
 
 run:
