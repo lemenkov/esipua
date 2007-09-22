@@ -38,9 +38,10 @@ AC_SUBST(ERL_FLAGS)
 AC_CONFIG_FILES([
 		 Makefile
 		 include/Makefile
-		 src/Makefile
-		 src/sipua/Makefile
-		 src/sipb2bua/Makefile
+		 sipua/Makefile
+		 sipua/src/Makefile
+		 sipb2bua/Makefile
+		 sipb2bua/src/Makefile
 		 releases/Makefile
 		])
 
