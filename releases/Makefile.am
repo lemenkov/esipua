@@ -2,8 +2,8 @@ include $(top_srcdir)/rules/rel.mk
 
 OTP_RELEASES = sipua sipb2bua
 
-AM_ERL_FLAGS = -pa $(top_builddir)/src/sipua -pa	\
-$(top_builddir)/src/sipb2bua
+AM_ERL_FLAGS = -pa $(top_builddir)/sipua/ebin -pa	\
+$(top_builddir)/sipb2bua/ebin
 
 run:
 	$(ERL) $(AM_ERL_FLAGS) $(ERL_FLAGS) $(AM_ERLCFLAGS) $(ERLCFLAGS)
