@@ -38,7 +38,6 @@ AC_SUBST(ERL_FLAGS)
 
 AC_CONFIG_FILES([
 		 Makefile
-		 include/Makefile
 		 sipua/Makefile
 		 sipua/include/Makefile
 		 sipua/src/Makefile
