@@ -298,7 +298,7 @@ update_authentication(Type, AuthDict, #sipauth{type=Type,realm=Realm}=Auth) when
 	    Stale =
 		case dict:find("stale", AuthDict) of
 		    {ok, Stale1} ->
-			case httpd_util:to_lower(Stale1) of
+			case string:to_lower(Stale1) of
 			    "false" ->
 				false;
 			    "true" ->
